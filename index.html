@@ -75,7 +75,6 @@
                 <p class="mt-2">Cargando aplicación...</p>
             </div>
         </main>
-
         <!-- Navegación Fija Inferior (Mobile-First) -->
         <nav class="fixed bottom-0 left-0 right-0 bg-white border-t shadow-2xl z-20 sm:hidden">
             <div class="flex justify-around items-center h-16">
@@ -87,8 +86,7 @@
                     <i data-lucide="clock-3" class="w-6 h-6 nav-icon" data-view="track"></i>
                     <span class="text-xs mt-1 font-medium">Registro</span>
                 </button>
-                <button
-onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-500 hover:text-blue-500">
+                <button onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-500 hover:text-blue-500">
                     <i data-lucide="bar-chart-3" class="w-6 h-6 nav-icon" data-view="reports"></i>
                     <span class="text-xs mt-1 font-medium">Reportes</span>
                 </button>
@@ -103,14 +101,19 @@ onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-50
         <div id="modal-container" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden items-center justify-center p-4 z-50">
             <!-- El modal se inyectará aquí -->
         </div>
-
     </div>
-<script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
+
+    <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
     <script>
         // Inicio de la Expresión de Función Ejecutada Inmediatamente (IIFE)
-        // Todo el código y las variables dentro de este bloque son privados.
         (function () {
-            
+            // Definición de utilitarias
+            const utilitarias = {
+                ejemploFuncion: function() {
+                    console.log("Esta es una función utilitaria.");
+                }
+            };
+
             // =========================================================================
             // CONFIGURACIÓN GLOBAL Y UTILIDADES (Privadas al IIFE)
             // =========================================================================
@@ -118,24 +121,22 @@ onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-50
             const DB_VERSION = 1;
             const STORES = ['branches', 'employees', 'timeEntries'];
             const GIST_API_BASE = 'https://api.github.com/gists';
-            
+
             // FIX 2: userId inicializado una sola vez y de forma robusta
             const userId = 'anon-' + (localStorage.getItem('anonId') || crypto.randomUUID());
             localStorage.setItem('anonId', userId);
-            
-            let db; 
+
+            let db;
             let currentView = 'dashboard';
             let branchList = [];
             let employeeList = [];
 
             // --- Utilidades (showMessage, deg2rad, getDistance, formatHours, sleep) ---
-
-            /** Muestra un mensaje modal de forma segura. */
             function showMessage(message, type = 'info') {
                 const container = document.getElementById('modal-container');
                 let bgColor = 'bg-blue-600';
                 let icon = 'info';
-    
+
                 if (type === 'error') {
                     bgColor = 'bg-red-600';
                     icon = 'alert-triangle';
@@ -143,7 +144,7 @@ onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-50
                     bgColor = 'bg-green-600';
                     icon = 'check-circle';
                 }
-    
+
                 const modalHtml = `
                     <div class="card p-6 w-full max-w-sm mx-auto transform transition-all scale-100 duration-300">
                         <div class="flex items-center space-x-4">
@@ -157,17 +158,15 @@ onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-50
                         </div>
                     </div>
                 `;
-    
+
                 container.innerHTML = modalHtml;
                 container.classList.remove('hidden');
                 container.classList.add('flex');
                 window.lucide.createIcons();
-    
-                setTimeout(hideMessage, 5000); 
-            }
 
-            /** Oculta el modal de mensajes. */
-            function hideMessage() {
+                setTimeout(hideMessage, 5000);
+            }
+function hideMessage() {
                 document.getElementById('modal-container').classList.add('hidden');
                 document.getElementById('modal-container').classList.remove('flex');
             }
@@ -175,7 +174,7 @@ onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-50
             function deg2rad(deg) {
                 return deg * (Math.PI / 180);
             }
-    
+
             function getDistance(lat1, lon1, lat2, lon2) {
                 const R = 6371000;
                 const dLat = deg2rad(lat2 - lat1);
@@ -185,7 +184,7 @@ onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-50
                     Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
                     Math.sin(dLon / 2) * Math.sin(dLon / 2);
                 const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-                return R * c; 
+                return R * c;
             }
 
             function formatHours(hours) {
@@ -198,26 +197,19 @@ onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-50
                 return new Promise(resolve => setTimeout(resolve, ms));
             }
 
-
             // =========================================================================
-            // DEXIE MANAGER 
+            // DEXIE MANAGER
             // =========================================================================
-
-            /** Inicializa la base de datos con Dexie. */
             function initDB() {
                 return new Promise((resolve, reject) => {
                     try {
-                        db = new Dexie(DB_NAME); 
+                        db = new Dexie(DB_NAME);
                         db.version(DB_VERSION).stores({
                             branches: '++id, name',
                             employees: '++id, branchId',
                             timeEntries: '++id, employeeId, clockIn'
                         });
-
-                        // FIX 3: Definición de una nueva versión (v2) vacía para manejo robusto de migraciones futuras
-                        db.version(2).upgrade(tx => {
-                            // Este bloque queda vacío, pero asegura que el código no falle si el usuario
-                            // modifica algo y la base de datos existente lo detecta como v1.
+db.version(2).upgrade(tx => {
                             console.log("Dexie: Base de datos v2 preparada para futuras migraciones.");
                         });
 
@@ -252,26 +244,22 @@ onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-50
                 return db.table(storeName).clear();
             }
 
-
             // =========================================================================
             // LÓGICA DE VISTAS Y MANEJADORES
             // =========================================================================
-
-            /** Cambia la vista activa y actualiza los íconos de navegación. */
             function showView(viewName) {
                 currentView = viewName;
                 const contentArea = document.getElementById('content-area');
-                
+
                 const renderResult = renderView(viewName);
-                
+
                 if (typeof renderResult === 'string') {
                     contentArea.innerHTML = renderResult;
                     window.lucide.createIcons();
                 }
 
                 if (viewName === 'setup') {
-                    // FIX 4: Llamada directa a los listeners después de la inserción síncrona de HTML
-                    setupFormListeners(); 
+                    setupFormListeners();
                 }
 
                 updateNavIcons(viewName);
@@ -282,7 +270,6 @@ onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-50
                     case 'dashboard':
                         return renderDashboard();
                     case 'track':
-                        // FIX 5: Carga asíncrona pasa el control a renderTrackView al finalizar
                         loadTrackData().then(renderTrackView).catch(console.error);
                         return `<div class="text-center py-10 text-gray-500"><i data-lucide="loader-2" class="w-8 h-8 mx-auto animate-spin"></i><p class="mt-2">Preparando vista de registro...</p></div>`;
                     case 'reports':
@@ -295,62 +282,10 @@ onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-50
                 }
             }
 
-            // ... (Resto /** ⚙️ Renderiza la vista de Ajustes/Setup. */
-function renderSetup(branches = [], employees = []) {
-    // Opciones para el selector de sucursales en el formulario de empleados
-    const branchOptions = branches.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
-
-    const branchListHtml = branches.map(b => `<li class="p-2 border-b last:border-b-0 flex justify-between items-center">${b.name} (${b.lat?.toFixed(3)}, ${b.lng?.toFixed(3)}) <button onclick="removeStoreItem('branches', ${b.id})" class="text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button></li>`).join('') || '<li>No hay sucursales.</li>';
-    const employeeListHtml = employees.map(e => `<li class="p-2 border-b last:border-b-0 flex justify-between items-center">${e.name} (${branches.find(b => b.id === e.branchId)?.name || 'Sin Sucursal'}) <button onclick="removeStoreItem('employees', ${e.id})" class="text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button></li>`).join('') || '<li>No hay empleados.</li>';
-    
-    return `
-        <h2 class="text-3xl font-bold mb-6 text-gray-800">Ajustes</h2>
-
-        <div class="card p-6 mb-6">
-            <h3 class="text-xl font-semibold mb-4">Administrar Sucursales</h3>
-            <form id="branch-form" class="space-y-4">
-                <input type="text" id="branchName" name="branchName" placeholder="Nombre de Sucursal" required class="w-full border-gray-300 rounded-lg p-2">
-                <div class="flex space-x-2">
-                    <input type="number" step="any" id="branchLat" name="branchLat" placeholder="Latitud (e.g., 19.43)" required class="w-1/2 border-gray-300 rounded-lg p-2">
-                    <input type="number" step="any" id="branchLng" name="branchLng" placeholder="Longitud (e.g., -99.13)" required class="w-1/2 border-gray-300 rounded-lg p-2">
-                </div>
-                <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Guardar Sucursal</button>
-            </form>
-
-            <h3 class="text-xl font-semibold mt-8 mb-4">Administrar Empleados</h3>
-            <form id="employee-form" class="space-y-4">
-                <input type="text" id="employeeName" name="employeeName" placeholder="Nombre del Empleado" required class="w-full border-gray-300 rounded-lg p-2">
-                <select id="employeeBranch" name="employeeBranch" required class="w-full border-gray-300 rounded-lg p-2">
-                    <option value="">Seleccionar Sucursal...</option>
-                    ${branchOptions}
-                </select>
-                <button type="submit" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700" ${branches.length === 0 ? 'disabled' : ''}>
-                    Guardar Empleado
-                </button>
-                ${branches.length === 0 ? '<p class="text-sm text-red-500">¡Necesita al menos una Sucursal para agregar Empleados!</p>' : ''}
-            </form>
-        </div>
-
-        <div class="card p-6">
-            <h3 class="text-xl font-semibold mb-3">Opciones y Datos</h3>
-            <button onclick="handleGistExport()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 mr-2">Exportar Gist</button>
-            <button onclick="handleGistImport()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">Importar Gist</button>
-
-            <h4 class="font-bold mt-6">Sucursales (${branches.length})</h4>
-            <ul id="branch-list" class="list-none space-y-1 text-sm">${branchListHtml}</ul>
-            <h4 class="font-bold mt-4">Empleados (${employees.length})</h4>
-            <ul id="employee-list" class="list-none space-y-1 text-sm">${employeeListHtml}</ul>
-        </div>
-    `;
-}
- funciones utilitarias y manejadores de Gist) ...
-
-            /** Carga datos necesarios para la vista de Registro de Tiempo. */
             async function loadTrackData() {
                 try {
                     const branches = await getAll('branches');
                     const employees = await getAll('employees');
-                    // Actualizar las globales para otras vistas
                     branchList = branches;
                     employeeList = employees;
                     return { branches, employees };
@@ -361,16 +296,16 @@ function renderSetup(branches = [], employees = []) {
                 }
             }
 
-            /** Renderiza la vista de Registro de Tiempo. */
             async function renderTrackView({ branches, employees }) {
                 const contentArea = document.getElementById('content-area');
 
                 if (employees.length === 0) {
                     contentArea.innerHTML = `<div class="p-6 text-center card bg-yellow-100 border-yellow-400 border"><p class="font-semibold text-yellow-800">No hay empleados registrados. Por favor, agregue perfiles en la sección Ajustes.</p></div>`;
                     return;
-                }const employeeOptions = employees.map(e => `<option value="${e.id}">${e.name} (${branches.find(b => b.id === e.branchId)?.name || 'Sin Sucursal'})</option>`).join('');
+                }
 
-                // FIX 8: Implementación de "Últimos Registros" (los últimos 5 globales)
+                const employeeOptions = employees.map(e => `<option value="${e.id}">${e.name} (${branches.find(b => b.id === e.branchId)?.name || 'Sin Sucursal'})</option>`).join('');
+
                 const lastEntries = await db.timeEntries.reverse().limit(5).toArray();
                 const employeeMap = new Map(employees.map(e => [e.id, e.name]));
 
@@ -380,7 +315,7 @@ function renderSetup(branches = [], employees = []) {
                     const employeeName = employeeMap.get(entry.employeeId) || 'Desconocido';
                     const timeIn = new Date(entry.clockIn).toLocaleTimeString();
                     const timeOut = entry.clockOut ? new Date(entry.clockOut).toLocaleTimeString() : 'N/A';
-                    
+
                     return `
                         <div class="card p-3 border-l-4 ${entry.clockOut ? 'border-green-400' : 'border-yellow-400'}">
                             <p class="font-bold text-gray-800">${employeeName}</p>
@@ -389,7 +324,6 @@ function renderSetup(branches = [], employees = []) {
                         </div>
                     `;
                 }).join('');
-
 
                 contentArea.innerHTML = `
                     <h2 class="text-3xl font-bold mb-6 text-gray-800">Registro de Tiempo</h2>
@@ -419,26 +353,23 @@ function renderSetup(branches = [], employees = []) {
                     </div>
                 `;
                 window.lucide.createIcons();
-                // Una vez cargada la vista, actualizar el botón con el estado real del empleado seleccionado
                 updateClockButtonState();
             }
 
-            /** Actualiza el estado del botón Clock In/Out según el empleado seleccionado. */
             async function updateClockButtonState() {
                 const $select = document.getElementById('employee-select');
                 const $button = document.querySelector('.clock-button');
-                
+
                 if (!$select || !$button) return;
 
                 const employeeId = parseInt($select.value);
-                
-                // Buscar la última entrada abierta para este empleado
+
                 const openEntry = await db.timeEntries
                     .where('employeeId').equals(employeeId)
                     .and(entry => entry.clockOut === null || entry.clockOut === undefined)
-                    .last(); 
-                
-                const status = openEntry ? 'IN' : 'OUT'; // Si hay entrada abierta, el estado actual es IN
+                    .last();
+
+                const status = openEntry ? 'IN' : 'OUT';
                 const buttonText = status === 'IN' ? 'Registrar Salida (Clock Out)' : 'Registrar Entrada (Clock In)';
                 const buttonColor = status === 'IN' ? 'bg-red-500 hover:bg-red-600' : 'bg-green-600 hover:bg-green-700';
                 const buttonIcon = status === 'IN' ? 'log-out' : 'log-in';
@@ -448,12 +379,9 @@ function renderSetup(branches = [], employees = []) {
                 $button.innerHTML = `<i data-lucide="${buttonIcon}" class="w-6 h-6 inline mr-2"></i> ${buttonText}`;
                 window.lucide.createIcons();
 
-                // Agregar listener al select para actualizar el botón
                 $select.onchange = updateClockButtonState;
             }
-
-            /** Carga y prepara los datos para la vista de Reportes. */
-            async function loadReportData() {
+async function loadReportData() {
                 try {
                     const entries = await getAll('timeEntries');
                     const employees = await getAll('employees');
@@ -461,8 +389,6 @@ function renderSetup(branches = [], employees = []) {
 
                     const employeeMap = new Map(employees.map(e => [e.id, e]));
                     const branchMap = new Map(branches.map(b => [b.id, b]));
-
-                    // ... (Resto de la lógica de cálculo de reportes, sin cambios) ...
 
                     return { entries, hoursByEmployee: {}, employeeMap, branchMap };
 
@@ -472,22 +398,21 @@ function renderSetup(branches = [], employees = []) {
                     return { entries: [], hoursByEmployee: {}, employeeMap: new Map(), branchMap: new Map() };
                 }
             }
-/** Renderiza la vista de Reportes/Estadísticas. */
+
             function renderReportsView(reportData) {
                 const contentArea = document.getElementById('content-area');
                 const { entries, hoursByEmployee, employeeMap, branchMap } = reportData;
 
-                let entryListHtml = entries.slice(-10).reverse().map(entry => { 
+                let entryListHtml = entries.slice(-10).reverse().map(entry => {
                     const employee = employeeMap.get(entry.employeeId);
                     const branch = branchMap.get(entry.branchId);
                     const branchName = branch?.name || 'Desconocida';
                     const employeeName = employee?.name || `ID: ${entry.employeeId}`;
 
                     let distanceHtml = '';
-                    // FIX 7: Chequeo estricto para coordenadas (null o undefined)
                     const hasInCoords = entry.inLat != null && entry.inLng != null;
                     const hasBranchCoords = branch?.lat != null && branch?.lng != null;
-                    
+
                     if (entry.clockOut && hasInCoords && hasBranchCoords) {
                         const distanceIn = getDistance(entry.inLat, entry.inLng, branch.lat, branch.lng);
                         const distanceOut = getDistance(entry.outLat, entry.outLng, branch.lat, branch.lng);
@@ -503,7 +428,6 @@ function renderSetup(branches = [], employees = []) {
                         `;
                     }
 
-                    // ... (Resto del HTML de la lista de entradas)
                     return `
                         <div class="card p-4 border-l-4 ${entry.clockOut ? 'border-green-400' : 'border-yellow-400'}">
                             <p class="font-bold text-gray-800">${employeeName}</p>
@@ -515,7 +439,6 @@ function renderSetup(branches = [], employees = []) {
                         </div>
                     `;
                 }).join('');
-
 
                 contentArea.innerHTML = `
                     <h2 class="text-3xl font-bold mb-6 text-gray-800">Reportes y Estadísticas</h2>
@@ -530,17 +453,123 @@ function renderSetup(branches = [], employees = []) {
                 window.lucide.createIcons();
             }
 
-            // ... (Resto de renderSetup - no cambia) ...
+            function renderDashboard() {
+                return `<div class="p-6 text-center card"><h3 class="text-xl font-bold mb-4">Dashboard</h3><p>Vista del Dashboard cargada. Inserte datos en 'Ajustes' para comenzar.</p><p class="mt-4">Horas totales: N/A</p></div>`;
+            }
 
+            function renderSetup(branches = [], employees = []) {
+                const branchOptions = branches.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
 
-            /** Maneja el registro de entrada/salida de un empleado. */
+                const branchListHtml = branches.map(b => `<li class="p-2 border-b last:border-b-0 flex justify-between items-center">${b.name} (${b.lat?.toFixed(3)}, ${b.lng?.toFixed(3)}) <button onclick="removeStoreItem('branches', ${b.id})" class="text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button></li>`).join('') || '<li>No hay sucursales.</li>';
+                const employeeListHtml = employees.map(e => `<li class="p-2 border-b last:border-b-0 flex justify-between items-center">${e.name} (${branches.find(b => b.id === e.branchId)?.name || 'Sin Sucursal'}) <button onclick="removeStoreItem('employees', ${e.id})" class="text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button></li>`).join('') || '<li>No hay empleados.</li>';
+
+                return `
+                    <h2 class="text-3xl font-bold mb-6 text-gray-800">Ajustes</h2>
+
+                    <div class="card p-6 mb-6">
+                        <h3 class="text-xl font-semibold mb-4">Administrar Sucursales</h3>
+                        <form id="branch-form" class="space-y-4">
+                            <input type="text" id="branchName" name="branchName" placeholder="Nombre de Sucursal" required class="w-full border-gray-300 rounded-lg p-2">
+                            <div class="flex space-x-2">
+                                <input type="number" step="any" id="branchLat" name="branchLat" placeholder="Latitud (e.g., 19.43)" required class="w-1/2 border-gray-300 rounded-lg p-2">
+                                <input type="number" step="any" id="branchLng" name="branchLng" placeholder="Longitud (e.g., -99.13)" required class="w-1/2 border-gray-300 rounded-lg p-2">
+                            </div>
+                            <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Guardar Sucursal</button>
+                        </form>
+
+                        <h3 class="text-xl font-semibold mt-8 mb-4">Administrar Empleados</h3>
+                        <form id="employee-form" class="space-y-4">
+                            <input type="text" id="employeeName" name="employeeName" placeholder="Nombre del Empleado" required class="w-full border-gray-300 rounded-lg p-2">
+                            <select id="employeeBranch" name="employeeBranch" required class="w-full border-gray-300 rounded-lg p-2">
+                                <option value="">Seleccionar Sucursal...</option>
+                                ${branchOptions}
+                            </select>
+                            <button type="submit" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700" ${branches.length === 0 ? 'disabled' : ''}>
+                                Guardar Empleado
+                            </button>
+                            ${branches.length === 0 ? '<p class="text-sm text-red-500">¡Necesita al menos una Sucursal para agregar Empleados!</p>' : ''}
+                        </form>
+                    </div>
+
+                    <div class="card p-6">
+                        <h3 class="text-xl font-semibold mb-3">Opciones y Datos</h3>
+                        <button onclick="handleGistExport()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 mr-2">Exportar Gist</button>
+                        <button onclick="handleGistImport()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">Importar Gist</button>
+
+                        <h4 class="font-bold mt-6">Sucursales (${branches.length})</h4>
+                        <ul id="branch-list" class="list-none space-y-1 text-sm">${branchListHtml}</ul>
+                        <h4 class="font-bold mt-4">Empleados (${employees.length})</h4>
+                        <ul id="employee-list" class="list-none space-y-1 text-sm">${employeeListHtml}</ul>
+                    </div>
+                `;
+            }
+
+            function setupFormListeners() {
+                document.getElementById('branch-form')?.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const name = e.target.branchName.value.trim();
+                    const lat = parseFloat(e.target.branchLat.value);
+                    const lng = parseFloat(e.target.branchLng.value);
+if (name) {
+                        await put('branches', { name, lat, lng });
+                        e.target.reset();
+                        await refreshSetupLists();
+                        showMessage(`Sucursal "${name}" guardada.`, 'success');
+                    } else {
+                        showMessage("El nombre de la sucursal no puede estar vacío.", 'error');
+                    }
+                });
+
+                document.getElementById('employee-form')?.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const name = e.target.employeeName.value.trim();
+                    const branchId = parseInt(e.target.employeeBranch.value);
+
+                    if (name && branchId) {
+                        await put('employees', { name, branchId });
+                        e.target.reset();
+                        await refreshSetupLists();
+                        showMessage(`Empleado "${name}" guardado.`, 'success');
+                    } else {
+                        showMessage("Debe ingresar nombre y seleccionar una sucursal.", 'error');
+                    }
+                });
+            }
+
+            async function refreshSetupLists() {
+                try {
+                    branchList = await getAll('branches');
+                    employeeList = await getAll('employees');
+          if (currentView === 'setup') {
+                        const contentArea = document.getElementById('content-area');
+                        contentArea.innerHTML = renderSetup(branchList, employeeList);
+                        window.lucide.createIcons();
+                        setupFormListeners();
+                    }
+                    return true;
+                } catch (error) {
+                    showMessage("Error al actualizar las listas de Ajustes.", 'error');
+                    console.error(error);
+                    return false;
+                }
+            }
+
+            async function removeStoreItem(storeName, id) {
+                try {
+                    await remove(storeName, id);
+                    await refreshSetupLists();
+                    showMessage(`Elemento eliminado de '${storeName}'.`, 'success');
+                } catch (error) {
+                    showMessage("Error al eliminar el elemento.", 'error');
+                    console.error(error);
+                }
+            }
+
             async function handleClockAction(status) {
                 const employeeId = parseInt(document.getElementById('employee-select').value);
                 const employee = employeeList.find(e => e.id === employeeId);
                 const messageEl = document.getElementById('status-message');
 
-                // ... (Validaciones de empleado) ...
-                
                 messageEl.textContent = 'Obteniendo ubicación... Por favor, espere.';
                 messageEl.classList.remove('hidden');
 
@@ -549,7 +578,6 @@ function renderSetup(branches = [], employees = []) {
                     messageEl.classList.add('hidden');
 
                     if (status === 'OUT') {
-                        // Acción: CLOCK IN (Crear nueva entrada)
                         const entry = {
                             employeeId: employeeId,
                             branchId: employee.branchId,
@@ -560,13 +588,10 @@ function renderSetup(branches = [], employees = []) {
                         await put('timeEntries', entry);
                         showMessage(`Entrada registrada para ${employee.name}. ¡Comenzó el turno!`, 'success');
                     } else {
-                        // Acción: CLOCK OUT (Actualizar última entrada)
-                        
-                        // FIX 6: Búsqueda eficiente y robusta usando Dexie Query (evita doble registro)
                         const openEntry = await db.timeEntries
                             .where('employeeId').equals(employeeId)
                             .and(entry => entry.clockOut === null || entry.clockOut === undefined)
-                            .last(); 
+                            .last();
 
                         if (!openEntry) {
                             showMessage("No se encontró una entrada abierta para registrar la salida.", 'error');
@@ -581,7 +606,6 @@ function renderSetup(branches = [], employees = []) {
                         showMessage(`Salida registrada para ${employee.name}. Turno finalizado.`, 'success');
                     }
 
-                    // Recargar solo la vista de track para actualizar listas y botón
                     showView('track');
 
                 } catch (error) {
@@ -590,250 +614,55 @@ function renderSetup(branches = [], employees = []) {
                 }
             }
 
-            /** Refresca las listas de Empleados y Sucursales, y renderiza la vista de Ajustes si es necesario. */
-            async function refreshSetupLists() {
-                try {
-                    branchList = await getAll('branches');
-                    employeeList = await getAll('employees');
-
-                    // Solo re-renderiza si estamos activamente en la vista 'setup'
-                    if (currentView === 'setup') {
-                        const contentArea = document.getElementById('content-area');
-                        // Esta línea requiere que 'renderSetup' esté definido (ver nota abajo)
-                        contentArea.innerHTML = renderSetup(branchList, employeeList); 
-                        window.lucide.createIcons();
-                        // Esta línea requiere que 'setupFormListeners' esté definido (ver nota abajo)
-                        setupFormListeners(); 
-                    }
-                    return true;
-                } catch (error) {
-                    showMessage("Error al actualizar las listas de Ajustes.", 'error');
-                    console.error(error);
-                    return false;
-                }
+            async function handleGistExport() {
+                showMessage("Función de Exportación a Gist no implementada completamente. Ver consola.", 'error');
+                console.warn("handleGistExport fue llamado pero necesita la implementación completa de Gist.");
             }
-            /** Elimina un elemento de la base de datos y refresca la vista. */
-            async function removeStoreItem(storeName, id) {
-                try {
-                    await remove(storeName, id); // 'remove' está definida en DEXIE MANAGER
-                    await refreshSetupLists(); // Llama a la función insertada justo arriba
-                    showMessage(`Elemento eliminado de '${storeName}'.`, 'success');
-                } catch (error) {
-                    showMessage("Error al eliminar el elemento.", 'error');
-                    console.error(error);
-                }
+
+            async function handleGistImport() {
+                showMessage("Función de Importación desde Gist no implementada completamente. Ver consola.", 'error');
+                console.warn("handleGistImport fue llamado pero necesita la implementación completa de Gist.");
             }
-// =========================================================================
-// FUNCIONES DE VISTA FALTANTES (renderDashboard y renderSetup)
-// =========================================================================
 
-/** Renderiza la vista inicial de Dashboard (Placeholder). */
-function renderDashboard() {
-    return `<div class="p-6 text-center card"><h3 class="text-xl font-bold mb-4">Dashboard</h3><p>Vista del Dashboard cargada. Inserte datos en 'Ajustes' para comenzar.</p><p class="mt-4">Horas totales: N/A</p></div>`;
-}
+            function updateNavIcons(viewName) {
+                document.querySelectorAll('.nav-icon').forEach(icon => {
+                    const iconView = icon.getAttribute('data-view');
+                    const link = icon.closest('a');
 
-/** ⚙️ Renderiza la vista de Ajustes/Setup. */
-function renderSetup(branches = [], employees = []) {
-    // Opciones para el selector de sucursales en el formulario de empleados
-    const branchOptions = branches.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
-
-    const branchListHtml = branches.map(b => `<li class="p-2 border-b last:border-b-0 flex justify-between items-center">${b.name} (${b.lat?.toFixed(3)}, ${b.lng?.toFixed(3)}) <button onclick="removeStoreItem('branches', ${b.id})" class="text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button></li>`).join('') || '<li>No hay sucursales.</li>';
-    const employeeListHtml = employees.map(e => `<li class="p-2 border-b last:border-b-0 flex justify-between items-center">${e.name} (${branches.find(b => b.id === e.branchId)?.name || 'Sin Sucursal'}) <button onclick="removeStoreItem('employees', ${e.id})" class="text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button></li>`).join('') || '<li>No hay empleados.</li>';
-    
-    return `
-        <h2 class="text-3xl font-bold mb-6 text-gray-800">Ajustes</h2>
-
-        <div class="card p-6 mb-6">
-            <h3 class="text-xl font-semibold mb-4">Administrar Sucursales</h3>
-            <form id="branch-form" class="space-y-4">
-                <input type="text" id="branchName" name="branchName" placeholder="Nombre de Sucursal" required class="w-full border-gray-300 rounded-lg p-2">
-                <div class="flex space-x-2">
-                    <input type="number" step="any" id="branchLat" name="branchLat" placeholder="Latitud (e.g., 19.43)" required class="w-1/2 border-gray-300 rounded-lg p-2">
-                    <input type="number" step="any" id="branchLng" name="branchLng" placeholder="Longitud (e.g., -99.13)" required class="w-1/2 border-gray-300 rounded-lg p-2">
-                </div>
-                <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Guardar Sucursal</button>
-            </form>
-
-            <h3 class="text-xl font-semibold mt-8 mb-4">Administrar Empleados</h3>
-            <form id="employee-form" class="space-y-4">
-                <input type="text" id="employeeName" name="employeeName" placeholder="Nombre del Empleado" required class="w-full border-gray-300 rounded-lg p-2">
-                <select id="employeeBranch" name="employeeBranch" required class="w-full border-gray-300 rounded-lg p-2">
-                    <option value="">Seleccionar Sucursal...</option>
-                    ${branchOptions}
-                </select>
-                <button type="submit" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700" ${branches.length === 0 ? 'disabled' : ''}>
-                    Guardar Empleado
-                </button>
-                ${branches.length === 0 ? '<p class="text-sm text-red-500">¡Necesita al menos una Sucursal para agregar Empleados!</p>' : ''}
-            </form>
-        </div>
-
-        <div class="card p-6">
-            <h3 class="text-xl font-semibold mb-3">Opciones y Datos</h3>
-            <button onclick="handleGistExport()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 mr-2">Exportar Gist</button>
-            <button onclick="handleGistImport()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">Importar Gist</button>
-
-            <h4 class="font-bold mt-6">Sucursales (${branches.length})</h4>
-            <ul id="branch-list" class="list-none space-y-1 text-sm">${branchListHtml}</ul>
-            <h4 class="font-bold mt-4">Empleados (${employees.length})</h4>
-            <ul id="employee-list" class="list-none space-y-1 text-sm">${employeeListHtml}</ul>
-        </div>
-    `;
-}
-
-// =========================================================================
-// LÓGICA DE MANEJADORES FALTANTES (Incluye la lógica de guardado)
-// =========================================================================
-
-/** 🔄 Configura los listeners para los formularios de Ajustes. */
-function setupFormListeners() {
-    // Listener para el formulario de Sucursales
-    document.getElementById('branch-form')?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const name = e.target.branchName.value.trim();
-        const lat = parseFloat(e.target.branchLat.value);
-        const lng = parseFloat(e.target.branchLng.value);
-
-        if (name) {
-            await put('branches', { name, lat, lng });
-            e.target.reset(); 
-            await refreshSetupLists(); 
-            showMessage(`Sucursal "${name}" guardada.`, 'success');
-        } else {
-            showMessage("El nombre de la sucursal no puede estar vacío.", 'error');
-        }
-    });
-
-    // Listener para el formulario de Empleados
-    document.getElementById('employee-form')?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const name = e.target.employeeName.value.trim();
-        const branchId = parseInt(e.target.employeeBranch.value);
-
-        if (name && branchId) {
-            await put('employees', { name, branchId });
-            e.target.reset(); 
-            await refreshSetupLists(); 
-            showMessage(`Empleado "${name}" guardado.`, 'success');
-        } else {
-            showMessage("Debe ingresar nombre y seleccionar una sucursal.", 'error');
-        }
-    });
-}
-
-/** Refresca las listas de Empleados y Sucursales, y renderiza la vista de Ajustes si es necesario. */
-async function refreshSetupLists() {
-    try {
-        branchList = await getAll('branches');
-        employeeList = await getAll('employees');
-
-        // Solo re-renderiza si estamos activamente en la vista 'setup'
-        if (currentView === 'setup') {
-            const contentArea = document.getElementById('content-area');
-            contentArea.innerHTML = renderSetup(branchList, employeeList); 
-            window.lucide.createIcons();
-            setupFormListeners(); 
-        }
-        return true;
-    } catch (error) {
-        showMessage("Error al actualizar las listas de Ajustes.", 'error');
-        console.error(error);
-        return false;
-    }
-}
-
-/** Elimina un elemento de la base de datos y refresca la vista. */
-async function removeStoreItem(storeName, id) {
-    try {
-        await remove(storeName, id); 
-        await refreshSetupLists(); 
-        showMessage(`Elemento eliminado de '${storeName}'.`, 'success');
-    } catch (error) {
-        showMessage("Error al eliminar el elemento.", 'error');
-        console.error(error);
-    }
-}
-
-/** Maneja el proceso de Exportación a Gist (Placeholder). */
-async function handleGistExport() {
-    showMessage("Función de Exportación a Gist no implementada completamente. Ver consola.", 'error');
-    console.warn("handleGistExport fue llamado pero necesita la implementación completa de Gist.");
-}
-
-/** Maneja el proceso de Importación desde Gist (Placeholder). */
-async function handleGistImport() {
-    showMessage("Función de Importación desde Gist no implementada completamente. Ver consola.", 'error');
-    console.warn("handleGistImport fue llamado pero necesita la implementación completa de Gist.");
-}
-
-/** Actualiza el estilo del ícono de navegación activo. */
-function updateNavIcons(viewName) {
-    document.querySelectorAll('.nav-icon').forEach(icon => {
-        const iconView = icon.getAttribute('data-view');
-        const link = icon.closest('a'); 
-        
-        // Verificación de seguridad para evitar 'Cannot read properties of null'
-        if (!link) {
-            return; 
-        }
-
-        if (iconView === viewName) {
-            link.classList.add('text-blue-500', 'font-semibold');
-            link.classList.remove('text-gray-500');
-        } else {
-            link.classList.remove('text-blue-500', 'font-semibold');
-            link.classList.add('text-gray-500');
-        }
-    });
-}
-
-/** Obtiene la ubicación actual del usuario (Funcional con Fallback). */
-function getCurrentLocation() {
-    return new Promise((resolve, reject) => {
-        if ("geolocation" in navigator) {
-            navigator.geolocation.getCurrentPosition(position => {
-                resolve({ lat: position.coords.latitude, lng: position.coords.longitude });
-            }, error => {
-                console.error("Geolocation error:", error);
-                showMessage("Error de Geolocalización. Usando 0,0.", 'error');
-                resolve({ lat: 0, lng: 0 }); // Fallback
-            }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
-        } else {
-            console.warn("Geolocation no soportada. Usando 0,0.");
-            resolve({ lat: 0, lng: 0 }); // Fallback
-        }
-    });
-}
-
-/** Renderiza la vista de Ajustes/Setup (Placeholder). */
-function renderSetup(branches = [], employees = []) {
-    const branchListHtml = branches.map(b => `<li class="p-2 border-b last:border-b-0 flex justify-between items-center">${b.name} <button onclick="removeStoreItem('branches', ${b.id})" class="text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button></li>`).join('') || '<li>No hay sucursales.</li>';
-    const employeeListHtml = employees.map(e => `<li class="p-2 border-b last:border-b-0 flex justify-between items-center">${e.name} (${branchList.find(b => b.id === e.branchId)?.name || 'Sin Sucursal'}) <button onclick="removeStoreItem('employees', ${e.id})" class="text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button></li>`).join('') || '<li>No hay empleados.</li>';
-    
-    return `
-        <h2 class="text-3xl font-bold mb-6 text-gray-800">Ajustes</h2>
-        <div class="card p-6 mb-6">
-            <h3 class="text-xl font-semibold mb-3">Administrar Datos</h3>
-            <button onclick="handleGistExport()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">Exportar Gist</button>
-            <button onclick="handleGistImport()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">Importar Gist</button>
-        </div>
-
-        <div class="card p-6">
-            <h3 class="text-xl font-semibold mb-3">Listas Actuales</h3>
-            <h4 class="font-bold mt-4">Sucursales (${branches.length})</h4>
-            <ul id="branch-list" class="list-none space-y-1">${branchListHtml}</ul>
-            <h4 class="font-bold mt-4">Empleados (${employees.length})</h4>
-            <ul id="employee-list" class="list-none space-y-1">${employeeListHtml}</ul>
-        </div>
-    `;
+                    if (!link) {
+                        return;
                     }
-            
+
+                    if (iconView === viewName) {
+                        link.classList.add('text-blue-500', 'font-semibold');
+                        link.classList.remove('text-gray-500');
+                    } else {
+                        link.classList.remove('text-blue-500', 'font-semibold');
+                        link.classList.add('text-gray-500');
+                    }
+                });
+            }
+
+            function getCurrentLocation() {
+                return new Promise((resolve, reject) => {
+                    if ("geolocation" in navigator) {
+                        navigator.geolocation.getCurrentPosition(position => {
+                            resolve({ lat: position.coords.latitude, lng: position.coords.longitude });
+                        }, error => {
+                            console.error("Geolocation error:", error);
+                            showMessage("Error de Geolocalización. Usando 0,0.", 'error');
+                            resolve({ lat: 0, lng: 0 });
+                        }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
+                    } else {
+                        console.warn("Geolocation no soportada. Usando 0,0.");
+                        resolve({ lat: 0, lng: 0 });
+                    }
+                });
+            }
 
             // =========================================================================
             // INICIO DE LA APLICACIÓN (Llamado al final del IIFE)
             // =========================================================================
-
-            /** Función de inicio de la aplicación (interna al IIFE). */
             async function initApp() {
                 // Exportar funciones necesarias al scope global (window) para onclick/eventos
                 window.showView = showView;
@@ -846,26 +675,20 @@ function renderSetup(branches = [], employees = []) {
                 window.updateClockButtonState = updateClockButtonState;
 
                 try {
-                    // FIX 2: Muestra el ID de usuario una vez.
                     document.getElementById('user-id-display').textContent = `ID de Usuario: ${userId.substring(0, 10)}... (Local)`;
-
                     await initDB();
-                    await refreshSetupLists(); 
-                    showView('dashboard'); 
+                    await refreshSetupLists();
+                    showView('dashboard');
                 } catch (error) {
                     showMessage("Fallo crítico al iniciar la aplicación. Ver consola.", 'error');
                     console.error("App initialization failed:", error);
                 }
-            };
-            
-            // Renderiza los iconos de la cabecera
+            }
+
             document.addEventListener('DOMContentLoaded', () => {
                 window.lucide.createIcons();
+                initApp();
             });
-
-            // FIX 1: Una sola llamada de inicio, dentro del IIFE.
-            initApp();
-
         })(); // Fin del IIFE
     </script>
 </body>
