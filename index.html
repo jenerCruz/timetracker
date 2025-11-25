@@ -624,13 +624,101 @@ function renderSetup(branches = [], employees = []) {
                 }
             }
 // =========================================================================
-// LÓGICA DE MANEJADORES Y UTILIDADES FALTANTES (SECCIÓN CRÍTICA)
+// FUNCIONES DE VISTA FALTANTES (renderDashboard y renderSetup)
 // =========================================================================
 
-/** Configura los listeners para los formularios de Ajustes (Placeholder). */
+/** Renderiza la vista inicial de Dashboard (Placeholder). */
+function renderDashboard() {
+    return `<div class="p-6 text-center card"><h3 class="text-xl font-bold mb-4">Dashboard</h3><p>Vista del Dashboard cargada. Inserte datos en 'Ajustes' para comenzar.</p><p class="mt-4">Horas totales: N/A</p></div>`;
+}
+
+/** ⚙️ Renderiza la vista de Ajustes/Setup. */
+function renderSetup(branches = [], employees = []) {
+    // Opciones para el selector de sucursales en el formulario de empleados
+    const branchOptions = branches.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+
+    const branchListHtml = branches.map(b => `<li class="p-2 border-b last:border-b-0 flex justify-between items-center">${b.name} (${b.lat?.toFixed(3)}, ${b.lng?.toFixed(3)}) <button onclick="removeStoreItem('branches', ${b.id})" class="text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button></li>`).join('') || '<li>No hay sucursales.</li>';
+    const employeeListHtml = employees.map(e => `<li class="p-2 border-b last:border-b-0 flex justify-between items-center">${e.name} (${branches.find(b => b.id === e.branchId)?.name || 'Sin Sucursal'}) <button onclick="removeStoreItem('employees', ${e.id})" class="text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button></li>`).join('') || '<li>No hay empleados.</li>';
+    
+    return `
+        <h2 class="text-3xl font-bold mb-6 text-gray-800">Ajustes</h2>
+
+        <div class="card p-6 mb-6">
+            <h3 class="text-xl font-semibold mb-4">Administrar Sucursales</h3>
+            <form id="branch-form" class="space-y-4">
+                <input type="text" id="branchName" name="branchName" placeholder="Nombre de Sucursal" required class="w-full border-gray-300 rounded-lg p-2">
+                <div class="flex space-x-2">
+                    <input type="number" step="any" id="branchLat" name="branchLat" placeholder="Latitud (e.g., 19.43)" required class="w-1/2 border-gray-300 rounded-lg p-2">
+                    <input type="number" step="any" id="branchLng" name="branchLng" placeholder="Longitud (e.g., -99.13)" required class="w-1/2 border-gray-300 rounded-lg p-2">
+                </div>
+                <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Guardar Sucursal</button>
+            </form>
+
+            <h3 class="text-xl font-semibold mt-8 mb-4">Administrar Empleados</h3>
+            <form id="employee-form" class="space-y-4">
+                <input type="text" id="employeeName" name="employeeName" placeholder="Nombre del Empleado" required class="w-full border-gray-300 rounded-lg p-2">
+                <select id="employeeBranch" name="employeeBranch" required class="w-full border-gray-300 rounded-lg p-2">
+                    <option value="">Seleccionar Sucursal...</option>
+                    ${branchOptions}
+                </select>
+                <button type="submit" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700" ${branches.length === 0 ? 'disabled' : ''}>
+                    Guardar Empleado
+                </button>
+                ${branches.length === 0 ? '<p class="text-sm text-red-500">¡Necesita al menos una Sucursal para agregar Empleados!</p>' : ''}
+            </form>
+        </div>
+
+        <div class="card p-6">
+            <h3 class="text-xl font-semibold mb-3">Opciones y Datos</h3>
+            <button onclick="handleGistExport()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 mr-2">Exportar Gist</button>
+            <button onclick="handleGistImport()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">Importar Gist</button>
+
+            <h4 class="font-bold mt-6">Sucursales (${branches.length})</h4>
+            <ul id="branch-list" class="list-none space-y-1 text-sm">${branchListHtml}</ul>
+            <h4 class="font-bold mt-4">Empleados (${employees.length})</h4>
+            <ul id="employee-list" class="list-none space-y-1 text-sm">${employeeListHtml}</ul>
+        </div>
+    `;
+}
+
+// =========================================================================
+// LÓGICA DE MANEJADORES FALTANTES (Incluye la lógica de guardado)
+// =========================================================================
+
+/** 🔄 Configura los listeners para los formularios de Ajustes. */
 function setupFormListeners() {
-    // Esta función debe contener la lógica para agregar event listeners a los formularios de Sucursales/Empleados.
-    console.log("setupFormListeners ejecutado. Agregue la lógica de guardado aquí.");
+    // Listener para el formulario de Sucursales
+    document.getElementById('branch-form')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const name = e.target.branchName.value.trim();
+        const lat = parseFloat(e.target.branchLat.value);
+        const lng = parseFloat(e.target.branchLng.value);
+
+        if (name) {
+            await put('branches', { name, lat, lng });
+            e.target.reset(); 
+            await refreshSetupLists(); 
+            showMessage(`Sucursal "${name}" guardada.`, 'success');
+        } else {
+            showMessage("El nombre de la sucursal no puede estar vacío.", 'error');
+        }
+    });
+
+    // Listener para el formulario de Empleados
+    document.getElementById('employee-form')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const name = e.target.employeeName.value.trim();
+        const branchId = parseInt(e.target.employeeBranch.value);
+
+        if (name && branchId) {
+            await put('employees', { name, branchId });
+            e.target.reset(); 
+            await refreshSetupLists(); 
+            showMessage(`Empleado "${name}" guardado.`, 'success');
+        } else {
+            showMessage("Debe ingresar nombre y seleccionar una sucursal.", 'error');
+        }
+    });
 }
 
 /** Refresca las listas de Empleados y Sucursales, y renderiza la vista de Ajustes si es necesario. */
@@ -668,50 +756,46 @@ async function removeStoreItem(storeName, id) {
 
 /** Maneja el proceso de Exportación a Gist (Placeholder). */
 async function handleGistExport() {
-    // Esta es la función que estaba causando el error de referencia en initApp
     showMessage("Función de Exportación a Gist no implementada completamente. Ver consola.", 'error');
     console.warn("handleGistExport fue llamado pero necesita la implementación completa de Gist.");
 }
 
 /** Maneja el proceso de Importación desde Gist (Placeholder). */
 async function handleGistImport() {
-    // Esta es la función que estaba causando el error de referencia en initApp
     showMessage("Función de Importación desde Gist no implementada completamente. Ver consola.", 'error');
     console.warn("handleGistImport fue llamado pero necesita la implementación completa de Gist.");
 }
 
 /** Actualiza el estilo del ícono de navegación activo. */
-            /** Actualiza el estilo del ícono de navegación activo. */
-            function updateNavIcons(viewName) {
-                document.querySelectorAll('.nav-icon').forEach(icon => {
-                    const iconView = icon.getAttribute('data-view');
-                    const link = icon.closest('a'); 
-                    
-                    // FIX CRÍTICO: Si no hay enlace (<a>) padre, salimos de esta iteración.
-                    if (!link) {
-                        return; 
-                    }
+function updateNavIcons(viewName) {
+    document.querySelectorAll('.nav-icon').forEach(icon => {
+        const iconView = icon.getAttribute('data-view');
+        const link = icon.closest('a'); 
+        
+        // Verificación de seguridad para evitar 'Cannot read properties of null'
+        if (!link) {
+            return; 
+        }
 
-                    if (iconView === viewName) {
-                        link.classList.add('text-blue-500', 'font-semibold');
-                        link.classList.remove('text-gray-500');
-                    } else {
-                        link.classList.remove('text-blue-500', 'font-semibold');
-                        link.classList.add('text-gray-500');
-                    }
-                });
-            }
+        if (iconView === viewName) {
+            link.classList.add('text-blue-500', 'font-semibold');
+            link.classList.remove('text-gray-500');
+        } else {
+            link.classList.remove('text-blue-500', 'font-semibold');
+            link.classList.add('text-gray-500');
+        }
+    });
+}
 
-/** Obtiene la ubicación actual del usuario (Placeholder). */
+/** Obtiene la ubicación actual del usuario (Funcional con Fallback). */
 function getCurrentLocation() {
-    // Implementación robusta de geolocalización
     return new Promise((resolve, reject) => {
         if ("geolocation" in navigator) {
             navigator.geolocation.getCurrentPosition(position => {
                 resolve({ lat: position.coords.latitude, lng: position.coords.longitude });
             }, error => {
                 console.error("Geolocation error:", error);
-                showMessage("Error de Geolocalización. Usando 0,0. Implemente un manejo robusto.", 'error');
+                showMessage("Error de Geolocalización. Usando 0,0.", 'error');
                 resolve({ lat: 0, lng: 0 }); // Fallback
             }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
         } else {
@@ -719,15 +803,6 @@ function getCurrentLocation() {
             resolve({ lat: 0, lng: 0 }); // Fallback
         }
     });
-}
-
-// =========================================================================
-// FUNCIONES DE VISTA FALTANTES (PARA EVITAR ERRORES EN renderView)
-// =========================================================================
-
-/** Renderiza la vista inicial de Dashboard (Placeholder). */
-function renderDashboard() {
-    return `<div class="p-6 text-center card"><h3 class="text-xl font-bold mb-4">Dashboard</h3><p>Vista del Dashboard cargada. Revise la consola para ver que no haya errores.</p><p class="mt-4">Horas totales: N/A</p></div>`;
 }
 
 /** Renderiza la vista de Ajustes/Setup (Placeholder). */
