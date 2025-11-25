@@ -542,8 +542,39 @@ onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-50
                 }
             }
 
+            /** Refresca las listas de Empleados y Sucursales, y renderiza la vista de Ajustes si es necesario. */
+            async function refreshSetupLists() {
+                try {
+                    branchList = await getAll('branches');
+                    employeeList = await getAll('employees');
 
-            // ... (setupFormListeners, removeStoreItem, handleGistExport, handleGistImport - no cambian) ...
+                    // Solo re-renderiza si estamos activamente en la vista 'setup'
+                    if (currentView === 'setup') {
+                        const contentArea = document.getElementById('content-area');
+                        // Esta línea requiere que 'renderSetup' esté definido (ver nota abajo)
+                        contentArea.innerHTML = renderSetup(branchList, employeeList); 
+                        window.lucide.createIcons();
+                        // Esta línea requiere que 'setupFormListeners' esté definido (ver nota abajo)
+                        setupFormListeners(); 
+                    }
+                    return true;
+                } catch (error) {
+                    showMessage("Error al actualizar las listas de Ajustes.", 'error');
+                    console.error(error);
+                    return false;
+                }
+            }
+            /** Elimina un elemento de la base de datos y refresca la vista. */
+            async function removeStoreItem(storeName, id) {
+                try {
+                    await remove(storeName, id); // 'remove' está definida en DEXIE MANAGER
+                    await refreshSetupLists(); // Llama a la función insertada justo arriba
+                    showMessage(`Elemento eliminado de '${storeName}'.`, 'success');
+                } catch (error) {
+                    showMessage("Error al eliminar el elemento.", 'error');
+                    console.error(error);
+                }
+            }
 
 
             // =========================================================================
