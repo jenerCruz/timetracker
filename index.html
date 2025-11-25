@@ -169,10 +169,16 @@ onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-50
         // =========================================================================
         // Configuración Global y Utilidades
         // =========================================================================
-        const DB_NAME = 'TimeTrackerDB';
+         const DB_NAME = 'TimeTrackerDB';
         const DB_VERSION = 1;
-        const STORES = ['branches', 'employees', 'timeEntries'];
-        let db; // Variable global para la conexión a IndexedDB
+        
+        // --- SUSTITUCIÓN DE ID DE USUARIO (SIN FIREBASE) ---
+        // Generación de un ID de usuario persistente (sustituto de Firebase UID)
+        window.userId = 'anon-' + (localStorage.getItem('anonId') || crypto.randomUUID());
+        localStorage.setItem('anonId', window.userId);
+        document.getElementById('user-id-display').textContent = `ID de Usuario: ${window.userId.substring(0, 10)}... (Local)`;
+
+        // ... (Mantener showMessage, hideMessage, deg2rad, getDistance, formatHours, sleep)
 
         /**
          * Muestra un mensaje modal de forma segura (reemplazando window.alert/confirm).
@@ -236,7 +242,7 @@ onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-50
          * @param {number} lat2 Latitud 2.
          * @param {number} lon2 Longitud 2.
          * @returns {number} Distancia en metros.
-  */
+        */
         function getDistance(lat1, lon1, lat2, lon2) {
             const R = 6371000; // Radio de la Tierra en metros
             const dLat = deg2rad(lat2 - lat1);
@@ -247,9 +253,7 @@ onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-50
                 Math.sin(dLon / 2) * Math.sin(dLon / 2);
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
             return R * c; // Distancia en metros
-        }
-
-        /**
+        } /**
          * Formatea un número en horas y minutos (ej: 1.5 -> 1h 30m).
          * @param {number} hours Horas totales (decimal).
          * @returns {string} Cadena formateada.
@@ -262,7 +266,7 @@ onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-50
 
         /**
          * Retraso para reintentos en Gist (Backoff exponencial).
-         * @param {number} attempt Número de intento.
+         * @param {number} ms Milisegundos a esperar.
          * @returns {Promise}
          */
         function sleep(ms) {
@@ -271,59 +275,35 @@ onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-50
 
 
         // =========================================================================
-        // IndexedDB Manager
+        // DEXIE MANAGER (Sustituto de IndexedDB)
         // =========================================================================
+        let db; // Variable global para la conexión a Dexie
+        const STORES = ['branches', 'employees', 'timeEntries']; // Usado solo para serializar/deserializar en Gist
 
         /**
-         * Inicializa la base de datos IndexedDB.
+         * Inicializa la base de datos con Dexie.
          */
         function initDB() {
             return new Promise((resolve, reject) => {
-                const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-                request.onerror = (event) => {
-                    console.error("Error al abrir IndexedDB:", event.target.errorCode);
-                    showMessage(`Error de base de datos: ${event.target.errorCode}`, 'error');
-                    reject('DB Error');
-                };
-
-                request.onupgradeneeded = (event) => {
-                    const db = event.target.result;
-                    STORES.forEach(storeName => {
-                        if (!db.objectStoreNames.contains(storeName)) {
-                            db.createObjectStore(storeName, { keyPath: 'id', autoIncrement: true });
-                        }
-                    });
-                };
-
-                request.onsuccess = (event) => {
-                    db = event.target.result;
-                    console.log("IndexedDB inicializada con éxito.");
-                    resolve(db);
-                };
-            });
-        }
-
-        /**
-         * Ejecuta una transacción básica en IndexedDB.
-         * @param {string} storeName Nombre del almacén.
-         * @param {string} mode 'readonly' o 'readwrite'.
-         * @param {function(IDBObjectStore): void} operation Operación a ejecutar.
-         * @returns {Promise<any>}
-         */
-        function transact(storeName, mode, operation) {
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(storeName, mode);
-                const store = transaction.objectStore(storeName);
-
-                transaction.oncomplete = () => resolve();
-                transaction.onerror = (event) => {
-                    console.error(`Error en transacción ${storeName}:`, event.target.error);
-                    reject(event.target.error);
-                };
-
                 try {
-                    operation(store, resolve, reject);
+                    db = new Dexie(DB_NAME);
+                    // Definición de las tablas (stores) con clave primaria auto-incremental '++id'
+                    db.version(DB_VERSION).stores({
+                        branches: '++id, name',
+                        employees: '++id, branchId',
+                        timeEntries: '++id, employeeId, clockIn'
+                    });
+
+                    db.open()
+                        .then(() => {
+                            console.log("Dexie (IndexedDB) inicializada con éxito.");
+                            resolve(db);
+                        })
+                        .catch(err => {
+                            console.error("Error al abrir Dexie:", err);
+                            showMessage(`Error de base de datos: ${err.message}`, 'error');
+                            reject(err);
+                        });
                 } catch (e) {
                     reject(e);
                 }
@@ -336,25 +316,17 @@ onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-50
          * @returns {Promise<Array<Object>>}
          */
         async function getAll(storeName) {
-            return new Promise((resolve, reject) => {
-                transact(storeName, 'readonly', (store) => {
-                    const request = store.getAll();
-                    request.onsuccess = () => resolve(request.result);
-                    request.onerror = (event) => reject(event.target.error);
-                });
-            });
+            return db.table(storeName).toArray();
         }
 
         /**
-         * Agrega o actualiza un objeto.
+         * Agrega o actualiza un objeto (usa 'id' como clave si existe).
          * @param {string} storeName
          * @param {Object} item
-         * @returns {Promise<void>}
+         * @returns {Promise<number>} ID de la clave insertada/actualizada.
          */
         async function put(storeName, item) {
-            return transact(storeName, 'readwrite', (store, resolve) => {
-                store.put(item).onsuccess = () => resolve();
-            });
+            return db.table(storeName).put(item);
         }
 
         /**
@@ -364,25 +336,17 @@ onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-50
          * @returns {Promise<Object|undefined>}
          */
         async function get(storeName, id) {
-            return new Promise((resolve, reject) => {
-                transact(storeName, 'readonly', (store) => {
-                    const request = store.get(id);
-                    request.onsuccess = () => resolve(request.result);
-                    request.onerror = (event) => reject(event.target.error);
-                });
-            });
-        }
-
-        /**
+            // Dexie maneja la conversión de tipo si la clave primaria lo permite
+            return db.table(storeName).get(parseInt(id));
+        }/**
          * Elimina un objeto por su ID.
          * @param {string} storeName
          * @param {number|string} id
          * @returns {Promise<void>}
          */
         async function remove(storeName, id) {
-            return transact(storeName, 'readwrite', (store, resolve) => {
-                store.delete(id).onsuccess = () => resolve();
-            });
+            // Aseguramos que el id sea numérico
+            return db.table(storeName).delete(parseInt(id));
         }
 
         /**
@@ -391,14 +355,12 @@ onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-50
          * @returns {Promise<void>}
          */
         async function clearStore(storeName) {
-            return transact(storeName, 'readwrite', (store, resolve) => {
-                store.clear().onsuccess = () => resolve();
-            });
+            return db.table(storeName).clear();
         }
 
 
         // =========================================================================
-        // Geolocation Logic
+        // Geolocation Logic (Mantenida)
         // =========================================================================
 
         /**
@@ -434,13 +396,13 @@ onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-50
 
 
         // =========================================================================
-        // Gist Synchronization Logic (Requiere Token de GitHub)
+        // Gist Synchronization Logic (Mantenida, usa las nuevas funciones de Dexie)
         // =========================================================================
 
         const GIST_API_BASE = 'https://api.github.com/gists';
 
         /**
-         * Serializa todos los datos de IndexedDB a un objeto JSON.
+         * Serializa todos los datos de Dexie a un objeto JSON.
          * @returns {Promise<Object>} Datos serializados.
          */
         async function serializeData() {
@@ -508,9 +470,8 @@ onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-50
                 }
             }
         }
-
-        /**
-         * Importa datos desde un GitHub Gist y sobrescribe IndexedDB.
+   /**
+         * Importa datos desde un GitHub Gist y sobrescribe Dexie.
          * @param {string} token Token de acceso personal de GitHub.
          * @param {string} gistId ID del Gist.
          * @returns {Promise<void>}
@@ -551,10 +512,8 @@ onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-50
                     // 2. Insertar los nuevos datos
                     for (const storeName of STORES) {
                         if (dataContent[storeName]) {
-                            await transact(storeName, 'readwrite', (store, resolve) => {
-                                dataContent[storeName].forEach(item => store.put(item));
-                                resolve();
-                            });
+                            // Dexie permite un bulkAdd o put
+                            await db.table(storeName).bulkPut(dataContent[storeName]);
                         }
                     }
                     return; // Éxito
@@ -567,24 +526,39 @@ onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-50
                 }
             }
         }
-
-
-        // =========================================================================
+// =========================================================================
         // Aplicación Principal y Renderizado
         // =========================================================================
-let currentView = 'dashboard';
+        let currentView = 'dashboard';
         let branchList = [];
         let employeeList = [];
 
         /**
          * Cambia la vista activa y actualiza los íconos de navegación.
+         * FIX: Corrige el flujo para asegurar la inicialización de listeners.
          * @param {string} viewName Nombre de la vista.
          */
         function showView(viewName) {
             currentView = viewName;
             const contentArea = document.getElementById('content-area');
-            contentArea.innerHTML = renderView(viewName);
-            lucide.createIcons();
+
+            // 1. Renderiza la vista (obtiene HTML o placeholder)
+            const renderResult = renderView(viewName);
+            
+            // Si renderView devuelve HTML directamente, lo insertamos
+            if (typeof renderResult === 'string') {
+                contentArea.innerHTML = renderResult;
+                lucide.createIcons();
+            }
+
+            // 2. Ejecuta listeners específicos después del renderizado si es necesario
+            if (viewName === 'setup') {
+                // FIX: Llama directamente a la inicialización de listeners para el formulario
+                // Se usa setTimeout para asegurar que el DOM se haya actualizado.
+                setTimeout(setupFormListeners, 50); 
+            }
+
+            // 3. Actualiza navegación
             updateNavIcons(viewName);
         }
 
@@ -607,17 +581,18 @@ let currentView = 'dashboard';
         /**
          * Función central para renderizar la vista.
          * @param {string} viewName
-         * @returns {string} HTML de la vista.
+         * @returns {string} HTML de la vista (o placeholder si es asíncrona).
          */
         function renderView(viewName) {
             switch (viewName) {
                 case 'dashboard':
                     return renderDashboard();
                 case 'track':
-                    loadTrackData().then(renderTrackView);
+                    // Se usa .then para que el renderizado final se haga después de la carga de datos.
+                    loadTrackData().then(renderTrackView).catch(console.error);
                     return `<div class="text-center py-10 text-gray-500"><i data-lucide="loader-2" class="w-8 h-8 mx-auto animate-spin"></i><p class="mt-2">Preparando vista de registro...</p></div>`;
                 case 'reports':
-                    loadReportData().then(renderReportsView);
+                    loadReportData().then(renderReportsView).catch(console.error);
                     return `<div class="text-center py-10 text-gray-500"><i data-lucide="loader-2" class="w-8 h-8 mx-auto animate-spin"></i><p class="mt-2">Generando reportes...</p></div>`;
                 case 'setup':
                     return renderSetup();
@@ -625,8 +600,7 @@ let currentView = 'dashboard';
                     return renderDashboard();
             }
         }
-
-        // ======================== RENDER VISTAS ESPECÍFICAS ========================
+// ======================== RENDER VISTAS ESPECÍFICAS (Mantenidas) ========================
 
         /** Renderiza la vista de Inicio/Dashboard. */
         function renderDashboard() {
@@ -635,7 +609,6 @@ let currentView = 'dashboard';
                 <h2 class="text-3xl font-bold mb-6 text-gray-800">Bienvenido al Time Tracker</h2>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <!-- Tarjeta de Empleados -->
                     <div class="card p-5 bg-indigo-50 border-l-4 border-indigo-500">
                         <div class="flex items-center">
                             <i data-lucide="users" class="w-8 h-8 text-indigo-500 mr-3"></i>
@@ -649,7 +622,6 @@ let currentView = 'dashboard';
                         </button>
                     </div>
 
-                    <!-- Tarjeta de Sucursales -->
                     <div class="card p-5 bg-green-50 border-l-4 border-green-500">
                         <div class="flex items-center">
                             <i data-lucide="map-pin" class="w-8 h-8 text-green-500 mr-3"></i>
@@ -663,7 +635,6 @@ let currentView = 'dashboard';
                         </button>
                     </div>
 
-                    <!-- Último Registro -->
                     <div class="md:col-span-2 card p-6">
                         <h3 class="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">Estado Reciente</h3>
                         <p class="text-gray-500">Aquí se mostrarán los datos resumidos y el último estado de registro de un empleado.</p>
@@ -723,8 +694,7 @@ let currentView = 'dashboard';
                         Obteniendo ubicación... Por favor, espere.
                     </div>
                 </div>
-
-                <h3 class="text-xl font-semibold text-gray-800 mb-3">Últimos Registros</h3>
+      <h3 class="text-xl font-semibold text-gray-800 mb-3">Últimos Registros</h3>
                 <div id="latest-entries" class="space-y-3">
                      <p class="text-gray-500">Los registros recientes se cargarán aquí (lógica no implementada para simplificar). Ver Reportes para todos los datos.</p>
                 </div>
@@ -775,7 +745,7 @@ let currentView = 'dashboard';
                     <li class="flex justify-between py-2 border-b last:border-b-0">
                         <span class="font-medium text-gray-700">${employeeMap.get(parseInt(id))?.name || `Empleado ID: ${id}`}</span>
                         <span class="font-bold text-indigo-600">${formatHours(hours)}</span>
-</li>
+                    </li>
                 `).join('');
             } else {
                  hoursSummaryHtml = '<p class="text-gray-500">No hay entradas completadas para calcular horas.</p>';
@@ -820,7 +790,6 @@ let currentView = 'dashboard';
             contentArea.innerHTML = `
                 <h2 class="text-3xl font-bold mb-6 text-gray-800">Reportes y Estadísticas</h2>
 
-                <!-- Resumen de Horas -->
                 <div class="card p-6 mb-6">
                     <h3 class="text-xl font-semibold text-gray-800 mb-3 border-b pb-2">Horas Totales Trabajadas</h3>
                     <ul class="divide-y divide-gray-100">
@@ -828,7 +797,6 @@ let currentView = 'dashboard';
                     </ul>
                 </div>
 
-                <!-- Lista de Registros -->
                 <div class="card p-6">
                     <h3 class="text-xl font-semibold text-gray-800 mb-3 border-b pb-2">Historial de Registros (Últimos ${entries.length})</h3>
                     <div class="space-y-4">
@@ -845,7 +813,6 @@ let currentView = 'dashboard';
                 <h2 class="text-3xl font-bold mb-6 text-gray-800">Ajustes y Configuración</h2>
 
                 <div class="space-y-8">
-                    <!-- Configuración de Sucursales -->
                     <div class="card p-6">
                         <h3 class="text-xl font-semibold text-gray-800 mb-4 flex items-center">
                             <i data-lucide="map-pin" class="w-5 h-5 mr-2 text-blue-500"></i>
@@ -862,11 +829,9 @@ let currentView = 'dashboard';
                             </button>
                         </form>
                         <ul id="branch-list" class="divide-y divide-gray-200">
-                            <!-- Lista de sucursales inyectada aquí -->
-                        </ul>
+                            </ul>
                     </div>
 
-                    <!-- Configuración de Empleados -->
                     <div class="card p-6">
                         <h3 class="text-xl font-semibold text-gray-800 mb-4 flex items-center">
                             <i data-lucide="user-plus" class="w-5 h-5 mr-2 text-indigo-500"></i>
@@ -883,12 +848,9 @@ let currentView = 'dashboard';
                             </button>
                         </form>
                         <ul id="employee-list" class="divide-y divide-gray-200">
-                            <!-- Lista de empleados inyectada aquí -->
-                        </ul>
+                            </ul>
                     </div>
-
-                     <!-- Sincronización con GitHub Gist -->
-                    <div class="card p-6 bg-gray-100 border-l-4 border-gray-400">
+         <div class="card p-6 bg-gray-100 border-l-4 border-gray-400">
                         <h3 class="text-xl font-semibold text-gray-800 mb-4 flex items-center">
                             <i data-lucide="git-branch" class="w-5 h-5 mr-2 text-gray-600"></i>
                             Sincronización (GitHub Gist)
@@ -1035,8 +997,14 @@ let currentView = 'dashboard';
 
         // ======================== MANEJADORES DE FORMULARIOS ========================
 
-        /** Configura los manejadores de eventos después de renderizar 'setup'. */
+        /** * FIX: Configura los manejadores de eventos después de renderizar 'setup'. 
+         * Se llama directamente desde showView.
+         */
         function setupFormListeners() {
+            // 1. Asegurarse de que las listas y el select de empleados estén cargados y actualizados.
+            refreshSetupLists();
+
+            // 2. Adjuntar listener de Sucursal
             document.getElementById('branch-form')?.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const name = document.getElementById('branch-name').value.trim();
@@ -1053,6 +1021,7 @@ let currentView = 'dashboard';
                 }
             });
 
+            // 3. Adjuntar listener de Empleado
             document.getElementById('employee-form')?.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const name = document.getElementById('employee-name').value.trim();
@@ -1068,14 +1037,11 @@ let currentView = 'dashboard';
                     showMessage("El Nombre del Empleado y la Sucursal son obligatorios.", 'error');
                 }
             });
-
-            // Llama a refreshSetupLists una vez que la vista de setup esté cargada
-            refreshSetupLists();
         }
-
-        /** Elimina un elemento de la base de datos y refresca la vista. */
+/** Elimina un elemento de la base de datos y refresca la vista. */
         async function removeStoreItem(storeName, id) {
             try {
+                // FIX: La función remove ya se encarga de convertir el id a número con el Dexie Manager.
                 await remove(storeName, id);
                 await refreshSetupLists();
                 showMessage(`Elemento eliminado de '${storeName}'.`, 'success');
@@ -1142,21 +1108,14 @@ let currentView = 'dashboard';
 
 
         /**
-         * Función de inicio de la aplicación, llamada después de la autenticación de Firebase.
+         * FIX: Función de inicio de la aplicación, ahora llamada inmediatamente.
          */
         window.initApp = async function() {
             try {
                 await initDB();
                 await refreshSetupLists(); // Cargar datos iniciales
-                // Añadir el listener para el cambio de vista, necesario para la vista 'setup'
-                document.getElementById('content-area').addEventListener('DOMSubtreeModified', (event) => {
-                    if (event.target.id === 'content-area' && currentView === 'setup') {
-                        setupFormListeners();
-                    }
-                }, { once: false }); // Usamos DOMSubtreeModified para detectar el cambio de vista
-
                 showView('dashboard'); // Mostrar la vista inicial
-       0     } catch (error) {
+            } catch (error) {
                 showMessage("Fallo crítico al iniciar la aplicación. Ver consola.", 'error');
                 console.error("App initialization failed:", error);
             }
@@ -1166,6 +1125,9 @@ let currentView = 'dashboard';
         document.addEventListener('DOMContentLoaded', () => {
             lucide.createIcons();
         });
+
+        // Llamada de inicio inmediata (Sustituye la espera de Firebase)
+        window.initApp();
 
     </script>
 </body>
