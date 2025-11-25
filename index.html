@@ -633,21 +633,26 @@ async function handleGistImport() {
 }
 
 /** Actualiza el estilo del ícono de navegación activo. */
-function updateNavIcons(viewName) {
-    // Esta es la función que estaba causando el error de referencia en showView
-    document.querySelectorAll('.nav-icon').forEach(icon => {
-        const iconView = icon.getAttribute('data-view');
-        const link = icon.closest('a');
-        
-        if (iconView === viewName) {
-            link.classList.add('text-blue-500', 'font-semibold');
-            link.classList.remove('text-gray-500');
-        } else {
-            link.classList.remove('text-blue-500', 'font-semibold');
-            link.classList.add('text-gray-500');
-        }
-    });
-}
+            /** Actualiza el estilo del ícono de navegación activo. */
+            function updateNavIcons(viewName) {
+                document.querySelectorAll('.nav-icon').forEach(icon => {
+                    const iconView = icon.getAttribute('data-view');
+                    const link = icon.closest('a'); 
+                    
+                    // FIX CRÍTICO: Si no hay enlace (<a>) padre, salimos de esta iteración.
+                    if (!link) {
+                        return; 
+                    }
+
+                    if (iconView === viewName) {
+                        link.classList.add('text-blue-500', 'font-semibold');
+                        link.classList.remove('text-gray-500');
+                    } else {
+                        link.classList.remove('text-blue-500', 'font-semibold');
+                        link.classList.add('text-gray-500');
+                    }
+                });
+            }
 
 /** Obtiene la ubicación actual del usuario (Placeholder). */
 function getCurrentLocation() {
