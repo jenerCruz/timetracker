@@ -1,43 +1,38 @@
 // assets/js/db.js
+(function () {
+    if (!window.Dexie) {
+        console.error("Dexie no está cargado. Asegúrate de incluir assets/js/dexie.js");
+        return;
+    }
 
-// Usamos IIFE para aislar el scope, pero exportamos las funciones
-(function (global) {
-    // 1. Definición de la Base de Datos (Dexie)
-    const db = new Dexie("TimeTrackerDB");
-    db.version(1).stores({
-        branches: '++id,name,lat,lng',
-        employees: '++id,name,branchId',
-        timeEntries: '++id,employeeId,branchId,clockIn,clockOut' 
+    const DB_NAME = 'TimeTrackerDB';
+    const DB_VERSION = 1;
+
+    const db = new Dexie(DB_NAME);
+    db.version(DB_VERSION).stores({
+        branches: '++id, name, lat, lng',
+        employees: '++id, name, branchId',
+        timeEntries: '++id, employeeId, clockIn, branchId'
     });
 
-    // 2. Funciones CRUD que APP.JS necesita
-    async function initDB() {
-        // Asegura que Dexie esté listo. Se llama en app.js
-        return db.open(); 
-    }
+    // Exponer db globalmente
+    window.appDB = db;
 
-    async function put(storeName, item) {
-        // Usa `item.id` si existe, o deja que Dexie genere un nuevo `id`
-        if (item.id) {
-            return db[storeName].put(item);
-        } else {
-            return db[storeName].add(item);
-        }
-    }
+    // Helpers
+    window.getAll = async function (storeName) {
+        return (await db.table(storeName).toArray()) || [];
+    };
 
-    async function getAll(storeName) {
-        return db[storeName].toArray();
-    }
+    window.put = async function (storeName, item) {
+        return await db.table(storeName).put(item);
+    };
 
-    async function remove(storeName, id) {
-        return db[storeName].delete(id);
-    }
-    
-    // 3. EXPORTAR a la ventana global para que app.js pueda llamarlas
-    global.db = db; // Exporta el objeto db completo (necesario para consultas avanzadas)
-    global.initDB = initDB;
-    global.put = put;
-    global.getAll = getAll;
-    global.remove = remove;
+    window.bulkPut = async function (storeName, items) {
+        if (!Array.isArray(items)) return;
+        return await db.table(storeName).bulkPut(items);
+    };
 
-})(window); 
+    window.remove = async function (storeName, id) {
+        return await db.table(storeName).delete(parseInt(id));
+    };
+})();
