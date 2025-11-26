@@ -1,7 +1,7 @@
 const CACHE_NAME = 'time-tracker-v2'; // Versión actualizada del cache
 const urlsToCache = [
     '/',
-    '/index (14).html',
+    '/index.html',
     '/src/output.css',
     '/assets/js/dexie.js',
     '/assets/js/lucide.min.js',
