@@ -5,7 +5,7 @@ const CACHE_NAME = 'time-tracker-v5';
 // (Mantén aquí tu lista urlsToCache anterior, pero asegúrate de que sea la más precisa)
 const urlsToCache = [
     '/',
-    'index (14).html', 
+    'index.html', 
     'src/output.css', 
     'manifest.json',
     'assets/js/dexie.js',
