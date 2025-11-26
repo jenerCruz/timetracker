@@ -75,7 +75,7 @@
                 <p class="mt-2">Cargando aplicación...</p>
             </div>
         </main>
-
+      <div id="reports-container" class="p-4"></div>
         <!-- Navegación Fija Inferior (Mobile-First) -->
         <nav class="fixed bottom-0 left-0 right-0 bg-white border-t shadow-2xl z-20 sm:hidden">
             <div class="flex justify-around items-center h-16">
@@ -709,6 +709,12 @@
             function renderDashboard() {
                 return `<div class="p-6 text-center card"><h3 class="text-xl font-bold mb-4">Dashboard</h3><p>Vista del Dashboard cargada. Inserte datos en 'Ajustes' para comenzar.</p><p class="mt-4">Horas totales: N/A</p></div>`;
             }
+
+<script src="assets/js/dexie.js"></script>
+<script src="assets/js/db.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/reports.js"></script>
+<script src="assets/js/forms.js"></script>
 
             // =========================================================================
             // INICIO DE LA APLICACIÓN
