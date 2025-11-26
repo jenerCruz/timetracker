@@ -1,90 +1,43 @@
 // assets/js/db.js
 
-// Definiciones globales de la DB
-const DB_NAME = 'TimeTrackerDB';
-const DB_VERSION = 1;
-
-let db;
-
-/**
- * Inicializa y abre la base de datos Dexie.
- * @returns {Promise<Dexie>} La instancia de la base de datos.
- */
-function initDB() {
-    return new Promise((resolve, reject) => {
-        try {
-            db = new Dexie(DB_NAME);
-            db.version(DB_VERSION).stores({
-                branches: '++id, name',
-                employees: '++id, branchId',
-                timeEntries: '++id, employeeId, clockIn'
-            });
-
-            db.version(2).upgrade(tx => {
-                console.log("Dexie: Base de datos v2 preparada para futuras migraciones.");
-            });
-
-            db.open()
-                .then(() => {
-                    console.log("Dexie DB abierta y lista.");
-                    resolve(db);
-                })
-                .catch(err => {
-                    console.error("Error al abrir Dexie:", err);
-                    window.showMessage(`Error de base de datos: ${err.message}`, 'error');
-                    reject(err);
-                });
-        } catch (e) {
-            reject(e);
-        }
+// Usamos IIFE para aislar el scope, pero exportamos las funciones
+(function (global) {
+    // 1. Definición de la Base de Datos (Dexie)
+    const db = new Dexie("TimeTrackerDB");
+    db.version(1).stores({
+        branches: '++id,name,lat,lng',
+        employees: '++id,name,branchId',
+        timeEntries: '++id,employeeId,branchId,clockIn,clockOut' 
     });
-}
 
-/**
- * Obtiene todos los elementos de un almacén (store).
- * @param {string} storeName - Nombre del almacén.
- * @returns {Promise<Array>} Lista de elementos.
- */
-async function getAll(storeName) {
-    if (!db) await initDB();
-    return db.table(storeName).toArray();
-}
+    // 2. Funciones CRUD que APP.JS necesita
+    async function initDB() {
+        // Asegura que Dexie esté listo. Se llama en app.js
+        return db.open(); 
+    }
 
-/**
- * Añade o actualiza un elemento en un almacén.
- * @param {string} storeName - Nombre del almacén.
- * @param {object} item - Elemento a guardar.
- * @returns {Promise<any>} Clave generada o actualizada.
- */
-async function put(storeName, item) {
-    if (!db) await initDB();
-    return db.table(storeName).put(item);
-}
+    async function put(storeName, item) {
+        // Usa `item.id` si existe, o deja que Dexie genere un nuevo `id`
+        if (item.id) {
+            return db[storeName].put(item);
+        } else {
+            return db[storeName].add(item);
+        }
+    }
 
-/**
- * Elimina un elemento por su ID.
- * @param {string} storeName - Nombre del almacén.
- * @param {number} id - ID del elemento.
- * @returns {Promise<void>}
- */
-async function remove(storeName, id) {
-    if (!db) await initDB();
-    return db.table(storeName).delete(parseInt(id));
-}
+    async function getAll(storeName) {
+        return db[storeName].toArray();
+    }
 
-/**
- * Limpia completamente un almacén.
- * @param {string} storeName - Nombre del almacén.
- * @returns {Promise<void>}
- */
-async function clearStore(storeName) {
-    if (!db) await initDB();
-    return db.table(storeName).clear();
-}
+    async function remove(storeName, id) {
+        return db[storeName].delete(id);
+    }
+    
+    // 3. EXPORTAR a la ventana global para que app.js pueda llamarlas
+    global.db = db; // Exporta el objeto db completo (necesario para consultas avanzadas)
+    global.initDB = initDB;
+    global.put = put;
+    global.getAll = getAll;
+    global.remove = remove;
 
-// Exportar funciones para uso global en la aplicación
-window.initDB = initDB;
-window.getAll = getAll;
-window.put = put;
-window.remove = remove;
-window.clearStore = clearStore;
+})(window); 
