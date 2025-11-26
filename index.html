@@ -3,22 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TicMe Tracker PWA (Consolidado)</title>
+    <title>TicMe Tracker PWA (Gist Sync)</title>
     
     <!-- Carga de Tailwind CSS -->
-    <link href="./src/output.css" rel="stylesheet.css>
+    <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Configuración para usar la fuente Inter -->
+    <!-- 
+        =======================================================================
+        CONFIGURACIÓN DE FUENTE CORREGIDA Y OPTIMIZADA
+        
+        CORRECCIÓN: Se agrega crossorigin="anonymous" a la etiqueta <link rel="preload"> 
+        si estuviera siendo usada, o se asegura que el @import no cause conflictos. 
+        Para simplificar y corregir el error de 'preload', volvemos a usar solo @import 
+        que es el método más simple y compatible en este contexto.
+        =======================================================================
+    -->
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
         html { font-family: 'Inter', sans-serif; }
     </style>
     
     <!-- Carga de Lucide Icons (Iconos) -->
-    <script src="./assets/js/lucide.udm.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
     
     <!-- Carga de Dexie (IndexedDB) -->
-    <script src="./assets/js/dexie.js"></script>
+    <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
 
     <!-- 
         =======================================================================
@@ -90,7 +99,7 @@
         <header class="p-4 border-b bg-white sticky top-0 z-10">
             <h1 class="text-2xl font-extrabold text-gray-800 flex items-center">
                 <i data-lucide="clock" class="w-6 h-6 mr-2 text-indigo-700"></i>
-                Time Tracker Pro 
+                Time Tracker Pro
             </h1>
             <p id="user-id-display" class="text-xs mt-1 text-gray-500 truncate">ID de Usuario: Cargando...</p>
         </header>
@@ -140,7 +149,10 @@
     -->
     <script>
         // Inicio de la Expresión de Función Ejecutada Inmediatamente (IIFE)
-        (function () {
+        // Se define el IIFE como ASYNC para poder usar await en el nivel superior,
+        // lo cual es la causa más común del error 'Unexpected token try' si no está
+        // encapsulado correctamente.
+        (async function () {
             
             // =========================================================================
             // CONFIGURACIÓN GLOBAL Y UTILIDADES
@@ -279,6 +291,10 @@
                 return db.table(storeName).put(item);
             }
 
+            async function bulkPut(storeName, items) {
+                 return db.table(storeName).bulkPut(items);
+            }
+
             async function remove(storeName, id) {
                 // Asegúrate de que id sea un número para la eliminación en Dexie
                 return db.table(storeName).delete(parseInt(id));
@@ -343,7 +359,7 @@
                 });
             }
 
-            // ------------------ Vista Dashboard (MEJORADA) ------------------
+            // ------------------ Vista Dashboard ------------------
             
             /** Carga y procesa los datos para el Dashboard. */
             async function loadDashboardData() {
@@ -367,7 +383,7 @@
                     if (entry.clockIn && entry.clockOut) {
                         const duration = entry.clockOut - entry.clockIn;
                         totalWorkMs += duration;
-                        employeeHours[entry.employeeId] += duration;
+                        employeeHours[entry.employeeId] = (employeeHours[entry.employeeId] || 0) + duration;
                     }
                     
                     // 2. Encontrar empleados activos
@@ -722,6 +738,117 @@
                 lucide.createIcons();
             }
             
+            // ------------------ Lógica Gist (Implementada) ------------------
+
+            const GIST_API_URL = 'https://api.github.com/gists/';
+            const GIST_FILENAME = 'tracker_config.json'; // Nombre único para el archivo JSON dentro del Gist
+
+            /** Ejecuta un Fetch seguro con manejo de errores comunes para Gist API. */
+            async function fetchGistApi(url, options) {
+                const response = await fetch(url, options);
+                
+                if (response.status === 401 || response.status === 403) {
+                    throw new Error("Error de autenticación: Token de GitHub inválido o sin permisos (Gist scope).");
+                }
+                if (!response.ok) {
+                    const errorBody = await response.json().catch(() => ({ message: response.statusText }));
+                    throw new Error(`Fallo en la API de Gist (${response.status}): ${errorBody.message}`);
+                }
+                
+                return response.json();
+            }
+
+            async function handleGistExport() {
+                const token = document.getElementById('githubToken').value.trim();
+                const gistId = document.getElementById('gistIdConfig').value.trim();
+
+                if (!token || !gistId) {
+                    showMessage("Debe ingresar el Token de GitHub y el ID del Gist de Configuración.", 'error');
+                    return;
+                }
+                
+                showMessage("Iniciando Exportación a Gist...", 'info');
+
+                try {
+                    // 1. Obtener los datos de Dexie
+                    const dataToExport = {
+                        employees: await getAll('employees'),
+                        branches: await getAll('branches'),
+                    };
+                    
+                    // 2. Crear el contenido JSON para el archivo único
+                    const fileContent = JSON.stringify(dataToExport, null, 2);
+                    
+                    // 3. Preparar la llamada de actualización (PATCH)
+                    const payload = {
+                        description: `Time Tracker Config - Sincronizado el ${new Date().toLocaleString()}`,
+                        files: {
+                            [GIST_FILENAME]: {
+                                content: fileContent
+                            }
+                        }
+                    };
+
+                    await fetchGistApi(GIST_API_URL + gistId, {
+                        method: 'PATCH',
+                        headers: {
+                            'Authorization': `token ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(payload)
+                    });
+
+                    showMessage("Exportación de Configuración completada con éxito.", 'success');
+                } catch (error) {
+                    showMessage(`Error de Exportación: ${error.message}`, 'error');
+                    console.error("Gist Export Error:", error);
+                }
+            }
+
+            async function handleGistImport() {
+                const token = document.getElementById('githubToken').value.trim();
+                const gistId = document.getElementById('gistIdConfig').value.trim();
+
+                if (!gistId) {
+                    showMessage("Debe ingresar el ID del Gist de Configuración para importar.", 'error');
+                    return;
+                }
+                
+                showMessage("Iniciando Importación desde Gist...", 'info');
+                
+                try {
+                    // 1. Obtener el Gist
+                    const headers = token ? { 'Authorization': `token ${token}` } : {};
+                    const gistResponse = await fetchGistApi(GIST_API_URL + gistId, { headers });
+                    
+                    // 2. Extraer el contenido del archivo de configuración
+                    const file = gistResponse.files[GIST_FILENAME];
+                    if (!file) {
+                        throw new Error(`No se encontró el archivo "${GIST_FILENAME}" dentro del Gist.`);
+                    }
+                    
+                    const dataToImport = JSON.parse(file.content);
+                    
+                    // 3. Validar y cargar los datos en Dexie
+                    if (Array.isArray(dataToImport.branches)) {
+                        await db.table('branches').clear(); // Limpiar tabla antes de cargar
+                        await bulkPut('branches', dataToImport.branches);
+                    }
+                    if (Array.isArray(dataToImport.employees)) {
+                        await db.table('employees').clear(); // Limpiar tabla antes de cargar
+                        await bulkPut('employees', dataToImport.employees);
+                    }
+                    
+                    // 4. Refrescar UI
+                    await refreshSetupLists();
+                    
+                    showMessage("Importación de Configuración completada con éxito.", 'success');
+                } catch (error) {
+                    showMessage(`Error de Importación: ${error.message}`, 'error');
+                    console.error("Gist Import Error:", error);
+                }
+            }
+            
             // ------------------ Vista Empleados/Configuraciones (Setup) ------------------
 
             function renderSetup(branches = [], employees = []) {
@@ -742,6 +869,10 @@
                         <button onclick="window.removeStoreItem('employees', ${e.id})" class="text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                     </li>`;
                 }).join('') || '<li>No hay empleados.</li>';
+
+                // Obtener valores guardados localmente para la interfaz de Gist (opcional, pero útil)
+                const savedToken = localStorage.getItem('githubToken') || '';
+                const savedGistId = localStorage.getItem('gistIdConfig') || '';
                 
                 return `
                     <h2 class="text-3xl font-bold mb-6 text-gray-800">Ajustes y Administración</h2>
@@ -773,16 +904,15 @@
                     </div>
 
                     <div class="card p-6">
-                        <h3 class="text-xl font-semibold mb-3">Configuración de Sincronización (Gist)</h3>
-                        <p class="text-xs text-gray-500 mb-4">La sincronización con Gist de GitHub garantiza la persistencia. (Funcionalidad Placeholder)</p>
+                        <h3 class="text-xl font-semibold mb-3">Configuración de Sincronización (GitHub Gist)</h3>
+                        <p class="text-sm text-gray-500 mb-4">Ingrese su Token y el ID del Gist único para guardar la configuración de empleados y sucursales.</p>
                         <div class="space-y-3">
-                            <input type="text" id="githubToken" placeholder="Token de GitHub (Para Escritura)" class="w-full border-gray-300 rounded-lg p-2">
-                            <input type="text" id="gistIdEmployees" placeholder="ID Gist Empleados" class="w-full border-gray-300 rounded-lg p-2">
-                            <input type="text" id="gistIdBranches" placeholder="ID Gist Sucursales" class="w-full border-gray-300 rounded-lg p-2">
+                            <input type="text" id="githubToken" onchange="localStorage.setItem('githubToken', this.value)" value="${savedToken}" placeholder="Token de GitHub (Necesario para Escritura)" class="w-full border-gray-300 rounded-lg p-2">
+                            <input type="text" id="gistIdConfig" onchange="localStorage.setItem('gistIdConfig', this.value)" value="${savedGistId}" placeholder="ID Gist Configuración (Ej: d5d7a8b...)" class="w-full border-gray-300 rounded-lg p-2">
                         </div>
                         <div class="mt-4 flex justify-between">
-                            <button onclick="window.handleGistExport()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">Exportar (Gist)</button>
-                            <button onclick="window.handleGistImport()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">Importar (Gist)</button>
+                            <button onclick="window.handleGistExport()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">Exportar (Guardar)</button>
+                            <button onclick="window.handleGistImport()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">Importar (Cargar)</button>
                         </div>
 
                         <h4 class="font-bold mt-6">Sucursales (${branches.length})</h4>
@@ -844,6 +974,12 @@
                     if (currentView === 'dashboard') {
                         showView('dashboard');
                     }
+                    
+                    // Si estamos en track, actualizamos el estado del botón
+                    if (currentView === 'track') {
+                        updateClockButtonState();
+                    }
+
 
                     return true;
                 } catch (error) {
@@ -863,36 +999,6 @@
                     showMessage("Error al eliminar el elemento.", 'error');
                     console.error(error);
                 }
-            }
-            
-            // ------------------ Lógica Gist (Placeholders) ------------------
-
-            async function handleGistExport() {
-                const token = document.getElementById('githubToken').value.trim();
-                const employeesGistId = document.getElementById('gistIdEmployees').value.trim();
-                const branchesGistId = document.getElementById('gistIdBranches').value.trim();
-
-                if (!token) {
-                    showMessage("Por favor, ingrese el Token de GitHub para exportar.", 'error');
-                    return;
-                }
-                
-                showMessage("Iniciando Exportación a Gist (Placeholder)...", 'info');
-                console.log("Token:", token, "Empleados Gist ID:", employeesGistId, "Sucursales Gist ID:", branchesGistId);
-            }
-
-            async function handleGistImport() {
-                const token = document.getElementById('githubToken').value.trim();
-                const employeesGistId = document.getElementById('gistIdEmployees').value.trim();
-                const branchesGistId = document.getElementById('gistIdBranches').value.trim();
-
-                if (!employeesGistId && !branchesGistId) {
-                    showMessage("Por favor, ingrese al menos un ID de Gist para importar.", 'error');
-                    return;
-                }
-                
-                showMessage("Iniciando Importación desde Gist (Placeholder)...", 'info');
-                console.log("Token:", token, "Empleados Gist ID:", employeesGistId, "Sucursales Gist ID:", branchesGistId);
             }
             
             // =========================================================================
@@ -919,19 +1025,23 @@
                     await initDB();
                     // Carga inicial de listas y luego muestra el Dashboard
                     await refreshSetupLists(); 
+                    showView('dashboard');
+
                 } catch (error) {
                     showMessage("Fallo crítico al iniciar la aplicación. Ver consola.", 'error');
                     console.error("App initialization failed:", error);
                 }
             };
             
-            // Inicia la aplicación al cargar el script
+            // Inicia la aplicación al cargar el script.
+            // La función initApp() que es 'async' se llama inmediatamente, y el 
+            // await de initDB() dentro de ella se maneja correctamente.
             document.addEventListener('DOMContentLoaded', () => {
                 initApp();
                 lucide.createIcons(); // Crear iconos iniciales
             });
 
-        })(); // Fin del IIFE
+        })(); // Fin del IIFE. Convertido a (async function() { ... })()
     </script>
 </body>
 </html>
