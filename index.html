@@ -3,55 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Time Tracker PWA - Profesional</title>
-    <link href="./src/output.css" rel="stylesheet">
+    <title>TicMe Tracker PWA</title>
+    
+    <link rel="manifest" href="./manifest.json">
+    
+    <link href="./src/output.css" rel="stylesheet"> 
+    <link href="./styles.css" rel="stylesheet"> 
+    
     <script src="./assets/js/lucide.min.js"></script>
-    <style>
-        /* Estilos personalizados para un look sofisticado */
-        :root {
-            --primary-color: #1e3a8a; /* Indigo 800 */
-            --accent-color: #3b82f6;  /* Blue 500 */
-        }
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f8f9fa; /* Light Gray background */
-        }
-        .app-container {
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-        .main-content {
-            flex-grow: 1;
-        }
-        .nav-icon {
-            transition: color 0.2s, transform 0.2s;
-        }
-        .nav-icon.active {
-            color: var(--accent-color);
-            transform: scale(1.1);
-        }
-        /* Estilo tipo card Bootstrap */
-        .card {
-            background-color: white;
-            border-radius: 0.75rem; /* rounded-xl */
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-            transition: transform 0.3s ease;
-        }
-        /* Animación para el botón principal de Clock In/Out */
-        .clock-button {
-            transition: all 0.3s ease;
-        }
-        .clock-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 15px 25px -5px rgba(59, 130, 246, 0.4);
-        }
-        /* Estilo para los inputs */
-        input:focus {
-            border-color: var(--accent-color);
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
-        }
-    </style>
 </head>
 <body class="bg-gray-50">
 
@@ -70,22 +29,22 @@
                 <p class="mt-2">Cargando aplicación...</p>
             </div>
         </main>
-      <div id="reports-container" class="p-4"></div>
+
         <nav class="fixed bottom-0 left-0 right-0 bg-white border-t shadow-2xl z-20 sm:hidden">
             <div class="flex justify-around items-center h-16">
-                <button onclick="showView('dashboard')" class="flex flex-col items-center p-2 text-gray-500 hover:text-blue-500">
+                <button onclick="window.showView('dashboard')" class="flex flex-col items-center p-2 text-gray-500 hover:text-blue-500">
                     <i data-lucide="layout-dashboard" class="w-6 h-6 nav-icon active" data-view="dashboard"></i>
                     <span class="text-xs mt-1 font-medium">Inicio</span>
                 </button>
-                <button onclick="showView('track')" class="flex flex-col items-center p-2 text-gray-500 hover:text-blue-500">
+                <button onclick="window.showView('track')" class="flex flex-col items-center p-2 text-gray-500 hover:text-blue-500">
                     <i data-lucide="clock-3" class="w-6 h-6 nav-icon" data-view="track"></i>
                     <span class="text-xs mt-1 font-medium">Registro</span>
                 </button>
-                <button onclick="showView('reports')" class="flex flex-col items-center p-2 text-gray-500 hover:text-blue-500">
+                <button onclick="window.showView('reports')" class="flex flex-col items-center p-2 text-gray-500 hover:text-blue-500">
                     <i data-lucide="bar-chart-3" class="w-6 h-6 nav-icon" data-view="reports"></i>
                     <span class="text-xs mt-1 font-medium">Reportes</span>
                 </button>
-                <button onclick="showView('setup')" class="flex flex-col items-center p-2 text-gray-500 hover:text-blue-500">
+                <button onclick="window.showView('setup')" class="flex flex-col items-center p-2 text-gray-500 hover:text-blue-500">
                     <i data-lucide="settings" class="w-6 h-6 nav-icon" data-view="setup"></i>
                     <span class="text-xs mt-1 font-medium">Ajustes</span>
                 </button>
@@ -93,27 +52,25 @@
         </nav>
 
         <div id="modal-container" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden items-center justify-center p-4 z-50">
-            </div>
-    </div>
-    <div id="modal-container" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden items-center justify-center p-4 z-50">
         </div>
-</div>
 
-<script src="assets/js/dexie.js"></script>
+    </div>
+    <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
+    
+    <script src="./app.js"></script>
 
-<script src="assets/js/db.js"></script>
-<script src="assets/js/data.js"></script>
-<script src="assets/js/app.js"></script>     
-
-<link rel="manifest" href="./manifest.json">
-<script>
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('./sw.js')
-                .then(reg => console.log('SW registrado exitosamente:', reg.scope))
-                .catch(err => console.error('Fallo en el registro del SW:', err));
-        });
-    }
-</script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js')
+                    .then(registration => {
+                        console.log('SW registrado con éxito:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.log('Fallo el registro de SW:', error);
+                    });
+            });
+        }
+    </script>
 </body>
 </html>
