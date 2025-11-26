@@ -1,6 +1,4 @@
 // reports.js
-
-// Función para cargar y renderizar los datos de reportes
 async function renderReportsView() {
     try {
         const reportsData = await loadReportData();
@@ -11,20 +9,16 @@ async function renderReportsView() {
             return;
         }
 
-        // Limpiar el contenedor
         reportsContainer.innerHTML = '';
 
-        // Verificar si hay datos
         if (!reportsData || reportsData.length === 0) {
             reportsContainer.innerHTML = '<p class="text-gray-500">No hay datos de reportes disponibles.</p>';
             return;
         }
 
-        // Crear una tabla para mostrar los reportes
         const table = document.createElement('table');
         table.className = 'min-w-full bg-white border border-gray-200';
 
-        // Crear encabezados de tabla
         const thead = document.createElement('thead');
         thead.innerHTML = `
             <tr>
@@ -37,7 +31,6 @@ async function renderReportsView() {
         `;
         table.appendChild(thead);
 
-        // Crear filas de datos
         const tbody = document.createElement('tbody');
         reportsData.forEach(report => {
             const row = document.createElement('tr');
@@ -52,10 +45,12 @@ async function renderReportsView() {
         });
         table.appendChild(tbody);
 
-        // Agregar la tabla al contenedor
         reportsContainer.appendChild(table);
     } catch (error) {
         console.error("Error al renderizar los reportes:", error);
-        document.getElementById('reports-container').innerHTML = '<p class="text-red-500">Error al cargar los reportes.</p>';
+        const reportsContainer = document.getElementById('reports-container');
+        if (reportsContainer) {
+            reportsContainer.innerHTML = '<p class="text-red-500">Error al cargar los reportes.</p>';
+        }
     }
 }
