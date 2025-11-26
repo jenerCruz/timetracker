@@ -95,10 +95,25 @@
         <div id="modal-container" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden items-center justify-center p-4 z-50">
             </div>
     </div>
+    <div id="modal-container" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden items-center justify-center p-4 z-50">
+        </div>
+</div>
 
-    <script src="assets/js/dexie.js"></script>
+<script src="assets/js/dexie.js"></script>
 
-    <script src="assets/js/db.js"></script>               <script src="assets/js/data.js"></script>
-<script src="assets/js/app.js"></script>   
+<script src="assets/js/db.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/app.js"></script>     
+
+<link rel="manifest" href="./manifest.json">
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js')
+                .then(reg => console.log('SW registrado exitosamente:', reg.scope))
+                .catch(err => console.error('Fallo en el registro del SW:', err));
+        });
+    }
+</script>
 </body>
 </html>
