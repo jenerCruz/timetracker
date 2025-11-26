@@ -3,18 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TicMe Tracker PWA</title>
+    <title>TicMe Tracker PWA (Consolidado)</title>
     
-    <link rel="manifest" href="./manifest.json">
+    <!-- Carga de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
     
-    <link href="./src/output.css" rel="stylesheet"> 
-    <link href="./styles.css" rel="stylesheet"> 
+    <!-- Configuración para usar la fuente Inter -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        html { font-family: 'Inter', sans-serif; }
+    </style>
     
-    <script src="./assets/js/lucide.min.js"></script>
+    <!-- Carga de Lucide Icons (Iconos) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Carga de Dexie (IndexedDB) -->
+    <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
+
+    <!-- 
+        =======================================================================
+        ESTILOS CONSOLIDADOS (styles.css) 
+        =======================================================================
+    -->
+    <style>
+        :root {
+            --primary-color: #1e3a8a; /* Indigo 800 */
+            --accent-color: #3b82f6;  /* Blue 500 */
+        }
+        body {
+            background-color: #f8f9fa; /* Light Gray background */
+        }
+        .app-container {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .main-content {
+            flex-grow: 1;
+        }
+        .nav-icon {
+            transition: color 0.2s, transform 0.2s;
+        }
+        .nav-icon.active {
+            color: var(--accent-color);
+            transform: scale(1.1);
+        }
+        /* Estilo tipo card */
+        .card {
+            background-color: white;
+            border-radius: 0.75rem; /* rounded-xl */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s ease;
+        }
+        /* Animación para el botón principal de Clock In/Out */
+        .clock-button {
+            transition: all 0.3s ease;
+        }
+        .clock-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 25px -5px rgba(59, 130, 246, 0.4);
+        }
+        /* Estilo para los inputs */
+        input:focus, select:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+        }
+    </style>
 </head>
 <body class="bg-gray-50">
 
     <div id="app" class="app-container max-w-4xl mx-auto shadow-2xl bg-white">
+        <!-- Encabezado Fijo -->
         <header class="p-4 border-b bg-white sticky top-0 z-10">
             <h1 class="text-2xl font-extrabold text-gray-800 flex items-center">
                 <i data-lucide="clock" class="w-6 h-6 mr-2 text-indigo-700"></i>
@@ -23,15 +82,19 @@
             <p id="user-id-display" class="text-xs mt-1 text-gray-500 truncate">ID de Usuario: Cargando...</p>
         </header>
 
+        <!-- Contenido Principal Dinámico -->
         <main id="content-area" class="main-content p-4 sm:p-6 pb-20 overflow-y-auto">
+            <!-- Contenido de Carga Inicial -->
             <div class="text-center py-10 text-gray-500">
                 <i data-lucide="loader-2" class="w-8 h-8 mx-auto animate-spin"></i>
                 <p class="mt-2">Cargando aplicación...</p>
             </div>
         </main>
 
+        <!-- Navegación Fija Inferior (Mobile-First) -->
         <nav class="fixed bottom-0 left-0 right-0 bg-white border-t shadow-2xl z-20 sm:hidden">
             <div class="flex justify-around items-center h-16">
+                <!-- Los eventos onclick llaman a funciones globales de la app -->
                 <button onclick="window.showView('dashboard')" class="flex flex-col items-center p-2 text-gray-500 hover:text-blue-500">
                     <i data-lucide="layout-dashboard" class="w-6 h-6 nav-icon active" data-view="dashboard"></i>
                     <span class="text-xs mt-1 font-medium">Inicio</span>
@@ -51,26 +114,685 @@
             </div>
         </nav>
 
+        <!-- Contenedor de Mensajes Modales/Notificaciones -->
         <div id="modal-container" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden items-center justify-center p-4 z-50">
         </div>
 
     </div>
-    <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
     
-    <script src="./app.js"></script>
-
+    <!-- 
+        =======================================================================
+        LÓGICA CONSOLIDADA (app.js) 
+        =======================================================================
+    -->
     <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./service-worker.js')
-                    .then(registration => {
-                        console.log('SW registrado con éxito:', registration.scope);
-                    })
-                    .catch(error => {
-                        console.log('Fallo el registro de SW:', error);
-                    });
+        // Inicio de la Expresión de Función Ejecutada Inmediatamente (IIFE)
+        (function () {
+            
+            // =========================================================================
+            // CONFIGURACIÓN GLOBAL Y UTILIDADES
+            // =========================================================================
+            const DB_NAME = 'TimeTrackerDB';
+            const DB_VERSION = 1;
+            // Generación de ID de usuario para Dexie
+            const userId = 'anon-' + (localStorage.getItem('anonId') || crypto.randomUUID());
+            localStorage.setItem('anonId', userId);
+            
+            let db; 
+            let currentView = 'dashboard';
+            let branchList = [];
+            let employeeList = [];
+
+            // --- UTILIDADES GLOBALES ---
+
+            function deg2rad(deg) {
+                return deg * (Math.PI / 180);
+            }
+
+            /** Calcula la distancia en metros (Fórmula Haversine) */
+            function getDistance(lat1, lon1, lat2, lon2) {
+                const R = 6371000;
+                const dLat = deg2rad(lat2 - lat1);
+                const dLon = deg2rad(lon2 - lon1);
+                const a =
+                    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+                    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                return R * c; 
+            }
+
+            /** Muestra un mensaje modal de forma segura. */
+            function showMessage(message, type = 'info') {
+                const container = document.getElementById('modal-container');
+                let bgColor = 'bg-blue-600';
+                let icon = 'info';
+
+                if (type === 'error') {
+                    bgColor = 'bg-red-600';
+                    icon = 'alert-triangle';
+                } else if (type === 'success') {
+                    bgColor = 'bg-green-600';
+                    icon = 'check-circle';
+                }
+
+                const modalHtml = `
+                    <div class="card p-6 w-full max-w-sm mx-auto transform transition-all scale-100 duration-300">
+                        <div class="flex items-center space-x-4">
+                            <i data-lucide="${icon}" class="w-6 h-6 text-white ${bgColor} rounded-full p-1 flex-shrink-0"></i>
+                            <p class="text-gray-700 font-semibold flex-grow">${message}</p>
+                        </div>
+                        <div class="mt-4 text-right">
+                            <button onclick="window.hideMessage()" class="px-4 py-2 text-sm font-medium rounded-lg text-white ${bgColor} hover:opacity-90">
+                                Cerrar
+                            </button>
+                        </div>
+                    </div>
+                `;
+container.innerHTML = modalHtml;
+                container.classList.remove('hidden');
+                container.classList.add('flex');
+                lucide.createIcons();
+
+                setTimeout(hideMessage, 5000); 
+            }
+
+            /** Oculta el modal de mensajes. */
+            function hideMessage() {
+                document.getElementById('modal-container').classList.add('hidden');
+                document.getElementById('modal-container').classList.remove('flex');
+            }
+
+            /** Obtiene la ubicación actual del usuario (Funcional con Fallback). */
+            function getCurrentLocation() {
+                return new Promise((resolve, reject) => {
+                    if ("geolocation" in navigator) {
+                        navigator.geolocation.getCurrentPosition(position => {
+                            resolve({ lat: position.coords.latitude, lng: position.coords.longitude });
+                        }, error => {
+                            console.error("Geolocation error:", error);
+                            showMessage("Error de Geolocalización. Usando ubicación de fallback (0,0).", 'error');
+                            // Fallback para evitar bloqueo de la app
+                            resolve({ lat: 0, lng: 0 }); 
+                        }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
+                    } else {
+                        console.warn("Geolocation no soportada. Usando ubicación de fallback (0,0).");
+                        resolve({ lat: 0, lng: 0 }); // Fallback
+                    }
+                });
+            }
+
+            // =========================================================================
+            // DEXIE MANAGER (IndexedDB)
+            // =========================================================================
+
+            /** Inicializa la base de datos con Dexie. */
+            function initDB() {
+                return new Promise((resolve, reject) => {
+                    try {
+                        db = new Dexie(DB_NAME); 
+                        db.version(DB_VERSION).stores({
+                            branches: '++id, name',
+                            employees: '++id, branchId',
+                            timeEntries: '++id, employeeId, clockIn'
+                        });
+
+                        db.open().then(() => resolve(db)).catch(err => {
+                            console.error("Error al abrir Dexie:", err);
+                            showMessage(`Error de base de datos: ${err.message}`, 'error');
+                            reject(err);
+                        });
+                    } catch (e) {
+                        reject(e);
+                    }
+                });
+            }
+
+            async function getAll(storeName) {
+                return db.table(storeName).toArray();
+            }
+
+            async function put(storeName, item) {
+                return db.table(storeName).put(item);
+            }
+
+            async function remove(storeName, id) {
+                // Asegúrate de que id sea un número para la eliminación en Dexie
+                return db.table(storeName).delete(parseInt(id));
+            }
+
+
+            // =========================================================================
+            // LÓGICA DE VISTAS Y MANEJADORES
+            // =========================================================================
+
+            /** Cambia la vista activa y actualiza los íconos de navegación. */
+            function showView(viewName) {
+                currentView = viewName;
+                const contentArea = document.getElementById('content-area');
+                
+                const renderResult = renderView(viewName);
+                
+                if (typeof renderResult === 'string') {
+                    contentArea.innerHTML = renderResult;
+                    lucide.createIcons();
+                }
+
+                if (viewName === 'setup') {
+                    setupFormListeners(); 
+                }
+
+                updateNavIcons(viewName);
+            }
+
+            function renderView(viewName) {
+                switch (viewName) {
+                    case 'dashboard':
+                        return renderDashboard();
+                    case 'track':
+                        loadTrackData().then(renderTrackView).catch(console.error);
+                        return `<div class="text-center py-10 text-gray-500"><i data-lucide="loader-2" class="w-8 h-8 mx-auto animate-spin"></i><p class="mt-2">Preparando vista de registro...</p></div>`;
+                    case 'reports':
+                        loadReportData().then(renderReportsView).catch(console.error);
+                        return `<div class="text-center py-10 text-gray-500"><i data-lucide="loader-2" class="w-8 h-8 mx-auto animate-spin"></i><p class="mt-2">Generando reportes...</p></div>`;
+                    case 'setup':
+                        return renderSetup(branchList, employeeList);
+                    default:
+                        return renderDashboard();
+                }
+            }
+
+            /** Actualiza el estilo del ícono de navegación activo. */
+            function updateNavIcons(viewName) {
+                document.querySelectorAll('.nav-icon').forEach(icon => {
+                    const iconView = icon.getAttribute('data-view');
+                    const button = icon.closest('button');
+                    
+                    if (!button) return;
+
+                    if (iconView === viewName) {
+                        icon.classList.add('active');
+                        button.classList.add('text-blue-500');
+                        button.classList.remove('text-gray-500');
+                    } else {
+                        icon.classList.remove('active');
+                        button.classList.remove('text-blue-500');
+                        button.classList.add('text-gray-500');
+                    }
+                });
+            }
+
+            // ------------------ Vista Dashboard ------------------
+            function renderDashboard() {
+                return `
+                    <h2 class="text-3xl font-bold mb-6 text-gray-800">Dashboard</h2>
+                    <div class="card p-6 text-center">
+                        <p class="text-gray-600">Bienvenido al Time Tracker Pro.</p>
+                        <p class="mt-3 font-semibold text-indigo-600">¡Navega a la pestaña Registro para iniciar un turno!</p>
+                        <p class="text-sm mt-4 text-gray-500">Empleados cargados: ${employeeList.length}</p>
+                        <p class="text-sm text-gray-500">Sucursales cargadas: ${branchList.length}</p>
+                    </div>
+                    <!-- Implementación futura: Horas trabajadas hoy/semanal, Empleados activos -->
+                `;
+            }
+            
+            // ------------------ Vista Checado (Track) ------------------
+
+            async function loadTrackData() {
+                try {
+                    const branches = await getAll('branches');
+                    const employees = await getAll('employees');
+                    branchList = branches;
+                    employeeList = employees;
+                    return { branches, employees };
+                } catch (error) {
+                    showMessage("Error al cargar datos de Sucursales/Empleados.", 'error');
+                    console.error(error);
+                    return { branches: [], employees: [] };
+                }
+            }
+
+            async function renderTrackView({ branches, employees }) {
+                const contentArea = document.getElementById('content-area');
+
+                if (employees.length === 0) {
+                    contentArea.innerHTML = `<div class="p-6 text-center card bg-yellow-100 border-yellow-400 border"><p class="font-semibold text-yellow-800">No hay empleados registrados. Por favor, agregue perfiles en la sección Ajustes.</p></div>`;
+                    return;
+                }
+                // FIX: El employeeId es un entero, se asegura el mapeo correcto
+                const employeeOptions = employees.map(e => `<option value="${e.id}">${e.name} (${branches.find(b => b.id === e.branchId)?.name || 'Sin Sucursal'})</option>`).join('');
+
+                const lastEntries = await db.timeEntries.reverse().limit(5).toArray();
+                const employeeMap = new Map(employees.map(e => [e.id, e.name]));
+
+                const latestEntriesHtml = lastEntries.map(entry => {
+                    const status = entry.clockOut ? 'Finalizado' : 'En turno';
+                    const statusColor = entry.clockOut ? 'text-green-600' : 'text-yellow-600 font-semibold';
+                    const employeeName = employeeMap.get(entry.employeeId) || 'Desconocido';
+                    const timeIn = new Date(entry.clockIn).toLocaleTimeString();
+                    const timeOut = entry.clockOut ? new Date(entry.clockOut).toLocaleTimeString() : 'N/A';
+                    
+                    return `
+                        <div class="card p-3 border-l-4 ${entry.clockOut ? 'border-green-400' : 'border-yellow-400'}">
+                            <p class="font-bold text-gray-800">${employeeName}</p>
+                            <p class="text-sm text-gray-600">IN: ${timeIn} | OUT: ${timeOut} </p>
+                            <p class="text-sm ${statusColor}">${status}</p>
+                        </div>
+                    `;
+                }).join('');
+
+                contentArea.innerHTML = `
+                    <h2 class="text-3xl font-bold mb-6 text-gray-800">Registro de Tiempo</h2>
+
+                    <div class="card p-6 mb-6">
+                        <label for="employee-select" class="block text-sm font-medium text-gray-700 mb-2">Seleccionar Empleado</label>
+                        <select id="employee-select" class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 p-3">
+                            ${employeeOptions}
+                        </select>
+
+                        <div class="mt-6 text-center">
+                            <button onclick="window.handleClockAction('OUT')"
+                                    class="clock-button w-full max-w-sm mx-auto text-white font-bold py-4 px-6 rounded-xl shadow-lg bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-opacity-50 transition duration-150 ease-in-out">
+                                <i data-lucide="log-in" class="w-6 h-6 inline mr-2"></i>
+                                Registrar Entrada (Clock In)
+                            </button>
+                        </div>
+
+                        <div id="status-message" class="mt-6 p-3 text-sm text-center bg-blue-50 text-blue-800 rounded-lg hidden">
+                            Obteniendo ubicación... Por favor, espere.
+                        </div>
+                    </div>
+
+                    <h3 class="text-xl font-semibold text-gray-800 mb-3">Últimos Registros (Globales)</h3>
+                    <div id="latest-entries" class="space-y-3">
+                         ${latestEntriesHtml || '<p class="text-gray-500">No hay registros de tiempo.</p>'}
+                    </div>
+                `;
+                lucide.createIcons();
+                updateClockButtonState();
+            }
+
+            /** Actualiza el estado del botón Clock In/Out según el empleado seleccionado. */
+            async function updateClockButtonState() {
+                const $select = document.getElementById('employee-select');
+                const $button = document.querySelector('.clock-button');
+                
+                if (!$select || !$button) return;
+
+                const employeeId = parseInt($select.value);
+                
+                const openEntry = await db.timeEntries
+                    .where('employeeId').equals(employeeId)
+                    .and(entry => entry.clockOut === null || entry.clockOut === undefined)
+                    .last(); 
+                
+                // Si hay entrada abierta (openEntry), la siguiente acción es OUT (para Clock Out)
+                const status = openEntry ? 'IN' : 'OUT'; 
+                const buttonText = status === 'IN' ? 'Registrar Salida (Clock Out)' : 'Registrar Entrada (Clock In)';
+                const buttonColor = status === 'IN' ? 'bg-red-500 hover:bg-red-600' : 'bg-green-600 hover:bg-green-700';
+                const buttonIcon = status === 'IN' ? 'log-out' : 'log-in';
+
+                $button.setAttribute('onclick', `window.handleClockAction('${status}')`);
+                $button.className = `clock-button w-full max-w-sm mx-auto text-white font-bold py-4 px-6 rounded-xl shadow-lg ${buttonColor} focus:outline-none focus:ring-4 focus:ring-opacity-50 transition duration-150 ease-in-out`;
+                $button.innerHTML = `<i data-lucide="${buttonIcon}" class="w-6 h-6 inline mr-2"></i> ${buttonText}`;
+                lucide.createIcons();
+
+                $select.onchange = updateClockButtonState;
+            }
+
+            /** Maneja el registro de entrada/salida de un empleado (Checado). */
+            async function handleClockAction(status) {
+                const employeeId = parseInt(document.getElementById('employee-select').value);
+                const employee = employeeList.find(e => e.id === employeeId);
+                const messageEl = document.getElementById('status-message');
+
+                if (!employee) {
+                    showMessage("Empleado no seleccionado.", 'error');
+                    return;
+                }
+                
+                messageEl.textContent = 'Obteniendo ubicación... Por favor, espere.';
+                messageEl.classList.remove('hidden');
+
+                try {
+                    const location = await getCurrentLocation();
+                    messageEl.classList.add('hidden');
+
+                    const branch = branchList.find(b => b.id === employee.branchId);
+                    const geocercaRadio = 100; // 100 metros por defecto
+
+                    if (branch && branch.lat && branch.lng) {
+                        const distance = getDistance(location.lat, location.lng, branch.lat, branch.lng);
+                        
+                        if (distance > geocercaRadio) {
+                            // Alerta de Geolocalización.
+                            showMessage(`Ubicación fuera de geocerca (Sucursal ${branch.name}). Distancia: ${distance.toFixed(2)}m.`, 'error');
+                        }
+                    }
+
+                    if (status === 'OUT') {
+                        // Acción: CLOCK IN
+                        const entry = {
+                            employeeId: employeeId,
+                            branchId: employee.branchId,
+                            clockIn: Date.now(),
+                            inLat: location.lat,
+                            inLng: location.lng,
+                            clockOut: null, 
+                        };
+                        await put('timeEntries', entry);
+                        showMessage(`Entrada registrada para ${employee.name}.`, 'success');
+                    } else {
+                        // Acción: CLOCK OUT
+                        const openEntry = await db.timeEntries
+                            .where('employeeId').equals(employeeId)
+                            .and(entry => entry.clockOut === null || entry.clockOut === undefined)
+                            .last(); 
+
+                        if (!openEntry) {
+                            showMessage("No se encontró una entrada abierta para registrar la salida.", 'error');
+                            return;
+                        }
+
+                        openEntry.clockOut = Date.now();
+                        openEntry.outLat = location.lat;
+                        openEntry.outLng = location.lng;
+
+                        await put('timeEntries', openEntry);
+                        showMessage(`Salida registrada para ${employee.name}.`, 'success');
+                    }
+
+                    showView('track'); // Refrescar la vista de registro
+
+                } catch (error) {
+                    messageEl.classList.add('hidden');
+                    showMessage(`Error al registrar: ${error.message}`, 'error');
+                }
+            }
+            
+            // ------------------ Vista Reportes ------------------
+
+            async function loadReportData() {
+                try {
+                    const entries = await getAll('timeEntries');
+                    const employees = await getAll('employees');
+                    const branches = await getAll('branches');
+
+                    const employeeMap = new Map(employees.map(e => [e.id, e]));
+                    const branchMap = new Map(branches.map(b => [b.id, b]));
+
+                    return { entries, employeeMap, branchMap };
+
+                } catch (error) {
+                    showMessage("Error al cargar datos para reportes.", 'error');
+                    console.error(error);
+                    return { entries: [], employeeMap: new Map(), branchMap: new Map() };
+                }
+            }
+
+            function renderReportsView(reportData) {
+                const contentArea = document.getElementById('content-area');
+                const { entries, employeeMap, branchMap } = reportData;
+
+                let entryListHtml = entries.slice().reverse().map(entry => { 
+                    const employee = employeeMap.get(entry.employeeId);
+                    const branch = branchMap.get(entry.branchId);
+                    const branchName = branch ? branch.name : 'Desconocida';
+                    const employeeName = employee ? employee.name : `ID: ${entry.employeeId}`;
+
+                    let distanceHtml = '';
+                    const hasInCoords = entry.inLat != null && entry.inLng != null;
+                    const hasBranchCoords = branch?.lat != null && branch?.lng != null;
+                    const geocercaRadio = 100;
+
+                    if (entry.clockOut && hasInCoords && hasBranchCoords) {
+                        const distanceIn = getDistance(entry.inLat, entry.inLng, branch.lat, branch.lng);
+                        const distanceOut = getDistance(entry.outLat, entry.outLng, branch.lat, branch.lng);
+                        const statusClassIn = distanceIn > geocercaRadio ? 'text-red-500' : 'text-green-500';
+                        const statusClassOut = distanceOut > geocercaRadio ? 'text-red-500' : 'text-green-500';
+
+                        distanceHtml = `
+                            <p class="text-xs text-gray-500 mt-1">
+                                Entrada: <span class="${statusClassIn}">${distanceIn.toFixed(2)}m</span> |
+                                Salida: <span class="${statusClassOut}">${distanceOut.toFixed(2)}m</span>
+                                (vs ${branchName})
+                            </p>
+                        `;
+                    }
+return `
+                        <div class="card p-4 border-l-4 ${entry.clockOut ? 'border-green-400' : 'border-yellow-400'}">
+                            <p class="font-bold text-gray-800">${employeeName}</p>
+                            <p class="text-sm text-gray-600">
+                                IN: ${new Date(entry.clockIn).toLocaleString()}
+                            </p>
+                            ${entry.clockOut ? `<p class="text-sm text-gray-600">OUT: ${new Date(entry.clockOut).toLocaleString()}</p>` : `<p class="text-sm text-yellow-600 font-semibold">Aún en turno</p>`}
+                            ${distanceHtml}
+                        </div>
+                    `;
+                }).join('');
+
+
+                contentArea.innerHTML = `
+                    <h2 class="text-3xl font-bold mb-6 text-gray-800">Reportes y Estadísticas</h2>
+                    
+                    <div class="card p-6 mb-6 bg-blue-50 border border-blue-200">
+                        <h3 class="text-xl font-semibold text-blue-800 mb-2">Resumen</h3>
+                        <p class="text-blue-700">Total de Registros: <span class="font-bold">${entries.length}</span></p>
+                        <p class="text-blue-700">Total de Empleados: <span class="font-bold">${employeeMap.size}</span></p>
+                    </div>
+
+                    <div class="card p-6">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-3 border-b pb-2">Historial de Registros (${entries.length})</h3>
+                        <div class="space-y-4">
+                            ${entryListHtml || '<p class="text-gray-500">No hay registros de tiempo en la base de datos.</p>'}
+                        </div>
+                    </div>
+                `;
+                lucide.createIcons();
+            }
+            
+            // ------------------ Vista Empleados/Configuraciones (Setup) ------------------
+
+            function renderSetup(branches = [], employees = []) {
+                const branchOptions = branches.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+
+                const branchListHtml = branches.map(b => 
+                    `<li class="p-2 border-b last:border-b-0 flex justify-between items-center">
+                        ${b.name} (${b.lat ? b.lat.toFixed(3) : 'N/A'}, ${b.lng ? b.lng.toFixed(3) : 'N/A'}) 
+                        <button onclick="window.removeStoreItem('branches', ${b.id})" class="text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </li>`
+                ).join('') || '<li>No hay sucursales.</li>';
+                
+                const employeeListHtml = employees.map(e => {
+                    const branch = branches.find(b => b.id === e.branchId);
+                    const branchName = branch ? branch.name : 'Sin Sucursal';
+                    return `<li class="p-2 border-b last:border-b-0 flex justify-between items-center">
+                        ${e.name} (${branchName}) 
+                        <button onclick="window.removeStoreItem('employees', ${e.id})" class="text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </li>`;
+                }).join('') || '<li>No hay empleados.</li>';
+                
+                return `
+                    <h2 class="text-3xl font-bold mb-6 text-gray-800">Ajustes y Administración</h2>
+
+                    <div class="card p-6 mb-6">
+                        <h3 class="text-xl font-semibold mb-4">Administrar Sucursales</h3>
+                        <form id="branch-form" class="space-y-4">
+                            <input type="text" id="branchName" name="branchName" placeholder="Nombre de Sucursal" required class="w-full border-gray-300 rounded-lg p-2">
+                            <div class="flex space-x-2">
+                                <input type="number" step="any" id="branchLat" name="branchLat" placeholder="Latitud (e.g., 19.43)" required class="w-1/2 border-gray-300 rounded-lg p-2">
+                                <input type="number" step="any" id="branchLng" name="branchLng" placeholder="Longitud (e.g., -99.13)" required class="w-1/2 border-gray-300 rounded-lg p-2">
+                            </div>
+                            <p class="text-sm text-gray-500">Nota: El radio de geocerca por defecto es 100m.</p>
+                            <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Guardar Sucursal</button>
+                        </form>
+
+                        <h3 class="text-xl font-semibold mt-8 mb-4">Administrar Empleados</h3>
+                        <form id="employee-form" class="space-y-4">
+                            <input type="text" id="employeeName" name="employeeName" placeholder="Nombre del Empleado" required class="w-full border-gray-300 rounded-lg p-2">
+                            <select id="employeeBranch" name="employeeBranch" required class="w-full border-gray-300 rounded-lg p-2">
+                                <option value="">Seleccionar Sucursal...</option>
+                                ${branchOptions}
+                            </select>
+                            <button type="submit" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700" ${branches.length === 0 ? 'disabled' : ''}>
+                                Guardar Empleado
+                            </button>
+                            ${branches.length === 0 ? '<p class="text-sm text-red-500">¡Necesita al menos una Sucursal para agregar Empleados!</p>' : ''}
+                        </form>
+                    </div>
+
+                    <div class="card p-6">
+                        <h3 class="text-xl font-semibold mb-3">Configuración de Sincronización (Gist)</h3>
+                        <p class="text-xs text-gray-500 mb-4">La sincronización con Gist de GitHub garantiza la persistencia. (Funcionalidad Placeholder)</p>
+                        <div class="space-y-3">
+                            <input type="text" id="githubToken" placeholder="Token de GitHub (Para Escritura)" class="w-full border-gray-300 rounded-lg p-2">
+                            <input type="text" id="gistIdEmployees" placeholder="ID Gist Empleados" class="w-full border-gray-300 rounded-lg p-2">
+                            <input type="text" id="gistIdBranches" placeholder="ID Gist Sucursales" class="w-full border-gray-300 rounded-lg p-2">
+                        </div>
+                        <div class="mt-4 flex justify-between">
+                            <button onclick="window.handleGistExport()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">Exportar (Gist)</button>
+                            <button onclick="window.handleGistImport()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">Importar (Gist)</button>
+                        </div>
+
+                        <h4 class="font-bold mt-6">Sucursales (${branches.length})</h4>
+                        <ul id="branch-list" class="list-none space-y-1 text-sm">${branchListHtml}</ul>
+                        <h4 class="font-bold mt-4">Empleados (${employees.length})</h4>
+                        <ul id="employee-list" class="list-none space-y-1 text-sm">${employeeListHtml}</ul>
+                    </div>
+                `;
+            }
+
+            /** 🔄 Configura los listeners para los formularios de Ajustes. */
+            function setupFormListeners() {
+                document.getElementById('branch-form')?.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const name = e.target.branchName.value.trim();
+                    const lat = parseFloat(e.target.branchLat.value);
+                    const lng = parseFloat(e.target.branchLng.value);
+
+                    if (name) {
+                        await put('branches', { name, lat, lng });
+                        e.target.reset(); 
+                        await refreshSetupLists(); 
+                        showMessage(`Sucursal "${name}" guardada.`, 'success');
+                    } else {
+                        showMessage("El nombre de la sucursal no puede estar vacío.", 'error');
+                    }
+                });
+
+                document.getElementById('employee-form')?.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const name = e.target.employeeName.value.trim();
+                    const branchId = parseInt(e.target.employeeBranch.value);
+
+                    if (name && branchId) {
+                        await put('employees', { name, branchId });
+                        e.target.reset(); 
+                        await refreshSetupLists(); 
+                        showMessage(`Empleado "${name}" guardado.`, 'success');
+                    } else {
+                        showMessage("Debe ingresar nombre y seleccionar una sucursal.", 'error');
+                    }
+                });
+            }
+
+            /** Refresca las listas de Empleados y Sucursales. */
+            async function refreshSetupLists() {
+                try {
+                    branchList = await getAll('branches');
+                    employeeList = await getAll('employees');
+
+                    if (currentView === 'setup') {
+                        const contentArea = document.getElementById('content-area');
+                        contentArea.innerHTML = renderSetup(branchList, employeeList); 
+                        lucide.createIcons();
+                        setupFormListeners(); 
+                    }
+                    return true;
+                } catch (error) {
+                    showMessage("Error al actualizar las listas de Ajustes.", 'error');
+                    console.error(error);
+                    return false;
+                }
+            }
+
+            /** Elimina un elemento de la base de datos y refresca la vista. */
+            async function removeStoreItem(storeName, id) {
+                try {
+                    await remove(storeName, id); 
+                    await refreshSetupLists(); 
+                    showMessage(`Elemento eliminado de '${storeName}'.`, 'success');
+                } catch (error) {
+                    showMessage("Error al eliminar el elemento.", 'error');
+                    console.error(error);
+                }
+            }
+            
+            // ------------------ Lógica Gist (Placeholders) ------------------
+
+            async function handleGistExport() {
+                const token = document.getElementById('githubToken').value.trim();
+                const employeesGistId = document.getElementById('gistIdEmployees').value.trim();
+                const branchesGistId = document.getElementById('gistIdBranches').value.trim();
+
+                if (!token) {
+                    showMessage("Por favor, ingrese el Token de GitHub para exportar.", 'error');
+                    return;
+                }
+                
+                showMessage("Iniciando Exportación a Gist (Placeholder)...", 'info');
+                console.log("Token:", token, "Empleados Gist ID:", employeesGistId, "Sucursales Gist ID:", branchesGistId);
+            }
+
+            async function handleGistImport() {
+                const token = document.getElementById('githubToken').value.trim();
+                const employeesGistId = document.getElementById('gistIdEmployees').value.trim();
+                const branchesGistId = document.getElementById('gistIdBranches').value.trim();
+
+                if (!employeesGistId && !branchesGistId) {
+                    showMessage("Por favor, ingrese al menos un ID de Gist para importar.", 'error');
+                    return;
+                }
+                
+                showMessage("Iniciando Importación desde Gist (Placeholder)...", 'info');
+                console.log("Token:", token, "Empleados Gist ID:", employeesGistId, "Sucursales Gist ID:", branchesGistId);
+            }
+            
+            // =========================================================================
+            // INICIO DE LA APLICACIÓN
+            // =========================================================================
+
+            /** Función de inicio de la aplicación (interna al IIFE). */
+            async function initApp() {
+                // 🚀 Exportar funciones al scope global (window) para los eventos onclick
+                window.showView = showView;
+                window.handleClockAction = handleClockAction;
+                window.removeStoreItem = removeStoreItem;
+                window.handleGistExport = handleGistExport;
+                window.handleGistImport = handleGistImport;
+                window.hideMessage = hideMessage;
+                window.showMessage = showMessage;
+                window.updateClockButtonState = updateClockButtonState; 
+
+                try {
+                    document.getElementById('user-id-display').textContent = `ID de Usuario: ${userId.substring(0, 10)}... (Local)`;
+
+                    await initDB();
+                    await refreshSetupLists(); 
+                    showView('dashboard'); 
+                } catch (error) {
+                    showMessage("Fallo crítico al iniciar la aplicación. Ver consola.", 'error');
+                    console.error("App initialization failed:", error);
+                }
+            };
+            
+            // Inicia la aplicación al cargar el script
+            document.addEventListener('DOMContentLoaded', () => {
+                initApp();
+                lucide.createIcons(); // Crear iconos iniciales
             });
-        }
+
+        })(); // Fin del IIFE
     </script>
 </body>
 </html>
