@@ -3,31 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TicMe Tracker PWA (Gist Sync)</title>
+    <title>Time Tracker PWA (Offline Ready)</title>
     
-    <!-- Carga de Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Carga de Tailwind CSS - *NOTA: En un entorno offline real, esta CDN debería ser cacheada o descargada* -->
+    <link href="./src/output.css"></script>
     
     <!-- 
         =======================================================================
-        CONFIGURACIÓN DE FUENTE CORREGIDA Y OPTIMIZADA
-        
-        CORRECCIÓN: Se agrega crossorigin="anonymous" a la etiqueta <link rel="preload"> 
-        si estuviera siendo usada, o se asegura que el @import no cause conflictos. 
-        Para simplificar y corregir el error de 'preload', volvemos a usar solo @import 
-        que es el método más simple y compatible en este contexto.
+        ACTIVOS LOCALES: 
+        Estos archivos deben existir en estas rutas para que el Service Worker
+        pueda cachearlos. (Debes descargar lucide.min.js y dexie.js)
         =======================================================================
     -->
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
-        html { font-family: 'Inter', sans-serif; }
-    </style>
-    
-    <!-- Carga de Lucide Icons (Iconos) -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-    
-    <!-- Carga de Dexie (IndexedDB) -->
-    <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
+    <script src="./assets/js/lucide.min.js"></script>
+    <script src="./assets/js/dexie.js"></script>
 
     <!-- 
         =======================================================================
@@ -35,12 +24,16 @@
         =======================================================================
     -->
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        /* El Service Worker debe cachear este URL de fuente y el archivo woff2 */
+        html { font-family: 'Inter', sans-serif; }
+        
         :root {
-            --primary-color: #1e3a8a; /* Indigo 800 */
-            --accent-color: #3b82f6;  /* Blue 500 */
+            --primary-color: #1e3a8a; 
+            --accent-color: #3b82f6;  
         }
         body {
-            background-color: #f8f9fa; /* Light Gray background */
+            background-color: #f8f9fa;
         }
         .app-container {
             min-height: 100vh;
@@ -57,14 +50,12 @@
             color: var(--accent-color);
             transform: scale(1.1);
         }
-        /* Estilo tipo card */
         .card {
             background-color: white;
-            border-radius: 0.75rem; /* rounded-xl */
+            border-radius: 0.75rem; 
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
             transition: transform 0.3s ease;
         }
-        /* Animación para el botón principal de Clock In/Out */
         .clock-button {
             transition: all 0.3s ease;
         }
@@ -72,23 +63,20 @@
             transform: translateY(-2px);
             box-shadow: 0 15px 25px -5px rgba(59, 130, 246, 0.4);
         }
-        /* Estilo para los inputs */
         input:focus, select:focus {
             border-color: var(--accent-color);
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
         }
-        
-        /* Estilos para la gráfica de barras simple */
         .bar-container {
             display: flex;
             align-items: center;
             margin-bottom: 0.5rem;
         }
         .bar {
-            height: 1.5rem; /* 6 */
-            border-radius: 0.25rem; /* rounded-md */
+            height: 1.5rem;
+            border-radius: 0.25rem;
             transition: width 0.5s ease;
-            background-color: #3b82f6; /* Blue 500 */
+            background-color: #3b82f6; 
         }
     </style>
 </head>
@@ -116,7 +104,6 @@
         <!-- Navegación Fija Inferior (Mobile-First) -->
         <nav class="fixed bottom-0 left-0 right-0 bg-white border-t shadow-2xl z-20 sm:hidden">
             <div class="flex justify-around items-center h-16">
-                <!-- Los eventos onclick llaman a funciones globales de la app -->
                 <button onclick="window.showView('dashboard')" class="flex flex-col items-center p-2 text-gray-500 hover:text-blue-500">
                     <i data-lucide="layout-dashboard" class="w-6 h-6 nav-icon active" data-view="dashboard"></i>
                     <span class="text-xs mt-1 font-medium">Inicio</span>
@@ -148,18 +135,27 @@
         =======================================================================
     -->
     <script>
-        // Inicio de la Expresión de Función Ejecutada Inmediatamente (IIFE)
-        // Se define el IIFE como ASYNC para poder usar await en el nivel superior,
-        // lo cual es la causa más común del error 'Unexpected token try' si no está
-        // encapsulado correctamente.
         (async function () {
             
             // =========================================================================
-            // CONFIGURACIÓN GLOBAL Y UTILIDADES
+            // A. REGISTRO DEL SERVICE WORKER (CLAVE PARA OFFLINE)
+            // =========================================================================
+            if ('serviceWorker' in navigator) {
+                try {
+                    // Registra el Service Worker en la raíz.
+                    const registration = await navigator.serviceWorker.register('./service-worker.js');
+                    console.log('Service Worker registrado con éxito. Scope:', registration.scope);
+                } catch (error) {
+                    console.error('Fallo en el registro del Service Worker:', error);
+                }
+            }
+
+
+            // =========================================================================
+            // B. CONFIGURACIÓN GLOBAL Y UTILIDADES (Mismo código anterior)
             // =========================================================================
             const DB_NAME = 'TimeTrackerDB';
             const DB_VERSION = 1;
-            // Generación de ID de usuario para Dexie
             const userId = 'anon-' + (localStorage.getItem('anonId') || crypto.randomUUID());
             localStorage.setItem('anonId', userId);
             
@@ -168,9 +164,6 @@
             let branchList = [];
             let employeeList = [];
 
-            // --- UTILIDADES GLOBALES ---
-            
-            /** Convierte milisegundos a horas y minutos legibles. */
             function msToHms(ms) {
                 if (ms < 0 || !ms) return "0h 0m";
                 const seconds = Math.floor(ms / 1000);
@@ -179,11 +172,8 @@
                 return `${hours}h ${minutes}m`;
             }
 
-            function deg2rad(deg) {
-                return deg * (Math.PI / 180);
-            }
+            function deg2rad(deg) { return deg * (Math.PI / 180); }
 
-            /** Calcula la distancia en metros (Fórmula Haversine) */
             function getDistance(lat1, lon1, lat2, lon2) {
                 const R = 6371000;
                 const dLat = deg2rad(lat2 - lat1);
@@ -196,7 +186,6 @@
                 return R * c; 
             }
 
-            /** Muestra un mensaje modal de forma segura. */
             function showMessage(message, type = 'info') {
                 const container = document.getElementById('modal-container');
                 let bgColor = 'bg-blue-600';
@@ -232,13 +221,11 @@
                 setTimeout(hideMessage, 5000); 
             }
 
-            /** Oculta el modal de mensajes. */
             function hideMessage() {
                 document.getElementById('modal-container').classList.add('hidden');
                 document.getElementById('modal-container').classList.remove('flex');
             }
 
-            /** Obtiene la ubicación actual del usuario (Funcional con Fallback). */
             function getCurrentLocation() {
                 return new Promise((resolve, reject) => {
                     if ("geolocation" in navigator) {
@@ -247,21 +234,19 @@
                         }, error => {
                             console.error("Geolocation error:", error);
                             showMessage("Error de Geolocalización. Usando ubicación de fallback (0,0).", 'error');
-                            // Fallback para evitar bloqueo de la app
                             resolve({ lat: 0, lng: 0 }); 
                         }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
                     } else {
                         console.warn("Geolocation no soportada. Usando ubicación de fallback (0,0).");
-                        resolve({ lat: 0, lng: 0 }); // Fallback
+                        resolve({ lat: 0, lng: 0 }); 
                     }
                 });
             }
 
             // =========================================================================
-            // DEXIE MANAGER (IndexedDB)
+            // C. DEXIE MANAGER (Mismo código anterior)
             // =========================================================================
 
-            /** Inicializa la base de datos con Dexie. */
             function initDB() {
                 return new Promise((resolve, reject) => {
                     try {
@@ -283,44 +268,28 @@
                 });
             }
 
-            async function getAll(storeName) {
-                return db.table(storeName).toArray();
-            }
-
-            async function put(storeName, item) {
-                return db.table(storeName).put(item);
-            }
-
-            async function bulkPut(storeName, items) {
-                 return db.table(storeName).bulkPut(items);
-            }
-
-            async function remove(storeName, id) {
-                // Asegúrate de que id sea un número para la eliminación en Dexie
-                return db.table(storeName).delete(parseInt(id));
-            }
+            async function getAll(storeName) { return db.table(storeName).toArray(); }
+            async function put(storeName, item) { return db.table(storeName).put(item); }
+            async function bulkPut(storeName, items) { return db.table(storeName).bulkPut(items); }
+            async function remove(storeName, id) { return db.table(storeName).delete(parseInt(id)); }
 
 
             // =========================================================================
-            // LÓGICA DE VISTAS Y MANEJADORES
+            // D. LÓGICA DE VISTAS Y MANEJADORES (Mismo código anterior)
             // =========================================================================
+            // (La implementación completa de showView, loadDashboardData, renderDashboard, etc., sigue aquí)
+            // ... (El código de las secciones D, E, F y G del archivo anterior va aquí) ...
 
-            /** Cambia la vista activa y actualiza los íconos de navegación. */
             function showView(viewName) {
                 currentView = viewName;
                 const contentArea = document.getElementById('content-area');
                 
-                // Muestra un loader mientras se renderiza la vista
                 contentArea.innerHTML = `<div class="text-center py-10 text-gray-500"><i data-lucide="loader-2" class="w-8 h-8 mx-auto animate-spin"></i><p class="mt-2">Cargando contenido...</p></div>`;
                 lucide.createIcons();
 
-                // Carga la vista dinámicamente
                 switch (viewName) {
                     case 'dashboard':
-                        loadDashboardData().then(renderDashboard).catch(e => {
-                            contentArea.innerHTML = `<div class="p-6 text-center card bg-red-100 text-red-800">Error al cargar dashboard: ${e.message}</div>`;
-                            console.error(e);
-                        });
+                        loadDashboardData().then(renderDashboard).catch(console.error);
                         break;
                     case 'track':
                         loadTrackData().then(renderTrackView).catch(console.error);
@@ -339,7 +308,6 @@
                 updateNavIcons(viewName);
             }
 
-            /** Actualiza el estilo del ícono de navegación activo. */
             function updateNavIcons(viewName) {
                 document.querySelectorAll('.nav-icon').forEach(icon => {
                     const iconView = icon.getAttribute('data-view');
@@ -359,9 +327,7 @@
                 });
             }
 
-            // ------------------ Vista Dashboard ------------------
-            
-            /** Carga y procesa los datos para el Dashboard. */
+            // --- Dashboard ---
             async function loadDashboardData() {
                 const employees = await getAll('employees');
                 const entries = await getAll('timeEntries');
@@ -370,23 +336,18 @@
                 const yesterday = now - (24 * 60 * 60 * 1000); 
 
                 let totalWorkMs = 0;
-                const employeeHours = {}; // { employeeId: totalMs }
+                const employeeHours = {};
                 const activeEmployees = [];
                 
-                // Inicializar horas y encontrar activos
-                employees.forEach(e => {
-                    employeeHours[e.id] = 0;
-                });
+                employees.forEach(e => { employeeHours[e.id] = 0; });
                 
                 entries.forEach(entry => {
-                    // 1. Calcular horas trabajadas
                     if (entry.clockIn && entry.clockOut) {
                         const duration = entry.clockOut - entry.clockIn;
                         totalWorkMs += duration;
                         employeeHours[entry.employeeId] = (employeeHours[entry.employeeId] || 0) + duration;
                     }
                     
-                    // 2. Encontrar empleados activos
                     if (entry.clockIn >= yesterday && entry.clockOut === null) {
                         if (!activeEmployees.includes(entry.employeeId)) {
                              activeEmployees.push(entry.employeeId);
@@ -394,7 +355,6 @@
                     }
                 });
                 
-                // Convertir y calcular máximo para la gráfica
                 let maxHoursMs = 0;
                 const employeeStats = employees.map(e => {
                     const totalMs = employeeHours[e.id] || 0;
@@ -417,12 +377,9 @@
                 };
             }
 
-            /** Renderiza el Dashboard con las estadísticas. */
             function renderDashboard(data) {
                 const contentArea = document.getElementById('content-area');
-                
-                // --- Generar Gráfica de Barras ---
-                const maxBarWidth = 100; // Porcentaje máximo
+                const maxBarWidth = 100;
                 
                 const barHtml = data.employeeStats.sort((a, b) => b.totalMs - a.totalMs).map(stat => {
                     const widthPercent = data.maxHoursMs > 0 ? (stat.totalMs / data.maxHoursMs) * maxBarWidth : 0;
@@ -442,21 +399,17 @@
                 contentArea.innerHTML = `
                     <h2 class="text-3xl font-bold mb-6 text-gray-800">Dashboard</h2>
                     
-                    <!-- Tarjetas de Resumen (Key Metrics) -->
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-                        
                         <div class="card p-4 bg-indigo-50 border-l-4 border-indigo-500">
                             <i data-lucide="users" class="w-6 h-6 text-indigo-500 mb-2"></i>
                             <p class="text-sm font-medium text-gray-500">Empleados Totales</p>
                             <p class="text-2xl font-bold text-gray-800">${data.totalEmployees}</p>
                         </div>
-
                         <div class="card p-4 bg-green-50 border-l-4 border-green-500">
                             <i data-lucide="check-circle" class="w-6 h-6 text-green-500 mb-2"></i>
                             <p class="text-sm font-medium text-gray-500">Empleados Activos</p>
                             <p class="text-2xl font-bold text-gray-800">${data.activeEmployeesCount}</p>
                         </div>
-                        
                         <div class="card p-4 bg-yellow-50 border-l-4 border-yellow-500">
                             <i data-lucide="clock-4" class="w-6 h-6 text-yellow-500 mb-2"></i>
                             <p class="text-sm font-medium text-gray-500">Total Horas Registradas</p>
@@ -464,7 +417,6 @@
                         </div>
                     </div>
                     
-                    <!-- Histograma de Horas por Empleado -->
                     <div class="card p-6">
                         <h3 class="text-xl font-semibold text-gray-800 mb-4 flex items-center">
                             <i data-lucide="bar-chart-2" class="w-5 h-5 mr-2 text-blue-600"></i>
@@ -480,8 +432,7 @@
                 lucide.createIcons();
             }
             
-            // ------------------ Vista Checado (Track) ------------------
-
+            // --- Track ---
             async function loadTrackData() {
                 try {
                     const branches = await getAll('branches');
@@ -558,7 +509,6 @@
                 updateClockButtonState();
             }
 
-            /** Actualiza el estado del botón Clock In/Out según el empleado seleccionado. */
             async function updateClockButtonState() {
                 const $select = document.getElementById('employee-select');
                 const $button = document.querySelector('.clock-button');
@@ -572,7 +522,6 @@
                     .and(entry => entry.clockOut === null || entry.clockOut === undefined)
                     .last(); 
                 
-                // Si hay entrada abierta (openEntry), la siguiente acción es IN (para Clock Out)
                 const status = openEntry ? 'IN' : 'OUT'; 
                 const buttonText = status === 'IN' ? 'Registrar Salida (Clock Out)' : 'Registrar Entrada (Clock In)';
                 const buttonColor = status === 'IN' ? 'bg-red-500 hover:bg-red-600' : 'bg-green-600 hover:bg-green-700';
@@ -586,7 +535,6 @@
                 $select.onchange = updateClockButtonState;
             }
 
-            /** Maneja el registro de entrada/salida de un empleado (Checado). */
             async function handleClockAction(status) {
                 const employeeId = parseInt(document.getElementById('employee-select').value);
                 const employee = employeeList.find(e => e.id === employeeId);
@@ -605,19 +553,17 @@
                     messageEl.classList.add('hidden');
 
                     const branch = branchList.find(b => b.id === employee.branchId);
-                    const geocercaRadio = 100; // 100 metros por defecto
+                    const geocercaRadio = 100;
 
                     if (branch && branch.lat != null && branch.lng != null) {
                         const distance = getDistance(location.lat, location.lng, branch.lat, branch.lng);
                         
                         if (distance > geocercaRadio) {
-                            // Alerta de Geolocalización.
                             showMessage(`Ubicación fuera de geocerca (Sucursal ${branch.name}). Distancia: ${distance.toFixed(2)}m.`, 'error');
                         }
                     }
 
                     if (status === 'OUT') {
-                        // Acción: CLOCK IN
                         const entry = {
                             employeeId: employeeId,
                             branchId: employee.branchId,
@@ -629,7 +575,6 @@
                         await put('timeEntries', entry);
                         showMessage(`Entrada registrada para ${employee.name}.`, 'success');
                     } else {
-                        // Acción: CLOCK OUT
                         const openEntry = await db.timeEntries
                             .where('employeeId').equals(employeeId)
                             .and(entry => entry.clockOut === null || entry.clockOut === undefined)
@@ -648,7 +593,7 @@
                         showMessage(`Salida registrada para ${employee.name}.`, 'success');
                     }
 
-                    showView('track'); // Refrescar la vista de registro
+                    showView('track');
 
                 } catch (error) {
                     messageEl.classList.add('hidden');
@@ -656,8 +601,7 @@
                 }
             }
             
-            // ------------------ Vista Reportes ------------------
-
+            // --- Reports ---
             async function loadReportData() {
                 try {
                     const entries = await getAll('timeEntries');
@@ -738,125 +682,85 @@
                 lucide.createIcons();
             }
             
-            // ------------------ Lógica Gist (Implementada) ------------------
-
+            // --- Gist Logic (Simplified) ---
             const GIST_API_URL = 'https://api.github.com/gists/';
-            const GIST_FILENAME = 'tracker_config.json'; // Nombre único para el archivo JSON dentro del Gist
+            const GIST_FILENAME = 'tracker_config.json';
 
-            /** Ejecuta un Fetch seguro con manejo de errores comunes para Gist API. */
             async function fetchGistApi(url, options) {
                 const response = await fetch(url, options);
-                
                 if (response.status === 401 || response.status === 403) {
-                    throw new Error("Error de autenticación: Token de GitHub inválido o sin permisos (Gist scope).");
+                    throw new Error("Error de autenticación: Token de GitHub inválido.");
                 }
                 if (!response.ok) {
                     const errorBody = await response.json().catch(() => ({ message: response.statusText }));
                     throw new Error(`Fallo en la API de Gist (${response.status}): ${errorBody.message}`);
                 }
-                
                 return response.json();
             }
 
             async function handleGistExport() {
-                const token = document.getElementById('githubToken').value.trim();
-                const gistId = document.getElementById('gistIdConfig').value.trim();
+                const token = localStorage.getItem('githubToken') || document.getElementById('githubToken').value.trim();
+                const gistId = localStorage.getItem('gistIdConfig') || document.getElementById('gistIdConfig').value.trim();
 
-                if (!token || !gistId) {
-                    showMessage("Debe ingresar el Token de GitHub y el ID del Gist de Configuración.", 'error');
-                    return;
-                }
-                
+                if (!token || !gistId) { showMessage("Faltan Token o ID del Gist.", 'error'); return; }
                 showMessage("Iniciando Exportación a Gist...", 'info');
 
                 try {
-                    // 1. Obtener los datos de Dexie
-                    const dataToExport = {
-                        employees: await getAll('employees'),
-                        branches: await getAll('branches'),
-                    };
-                    
-                    // 2. Crear el contenido JSON para el archivo único
+                    const dataToExport = { employees: await getAll('employees'), branches: await getAll('branches') };
                     const fileContent = JSON.stringify(dataToExport, null, 2);
                     
-                    // 3. Preparar la llamada de actualización (PATCH)
                     const payload = {
                         description: `Time Tracker Config - Sincronizado el ${new Date().toLocaleString()}`,
-                        files: {
-                            [GIST_FILENAME]: {
-                                content: fileContent
-                            }
-                        }
+                        files: { [GIST_FILENAME]: { content: fileContent } }
                     };
 
                     await fetchGistApi(GIST_API_URL + gistId, {
                         method: 'PATCH',
-                        headers: {
-                            'Authorization': `token ${token}`,
-                            'Content-Type': 'application/json'
-                        },
+                        headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
                     });
 
                     showMessage("Exportación de Configuración completada con éxito.", 'success');
-                } catch (error) {
-                    showMessage(`Error de Exportación: ${error.message}`, 'error');
-                    console.error("Gist Export Error:", error);
-                }
+                } catch (error) { showMessage(`Error de Exportación: ${error.message}`, 'error'); console.error(error); }
             }
 
             async function handleGistImport() {
-                const token = document.getElementById('githubToken').value.trim();
-                const gistId = document.getElementById('gistIdConfig').value.trim();
+                const token = localStorage.getItem('githubToken') || '';
+                const gistId = localStorage.getItem('gistIdConfig') || document.getElementById('gistIdConfig').value.trim();
 
-                if (!gistId) {
-                    showMessage("Debe ingresar el ID del Gist de Configuración para importar.", 'error');
-                    return;
-                }
-                
+                if (!gistId) { showMessage("Falta el ID del Gist para importar.", 'error'); return; }
                 showMessage("Iniciando Importación desde Gist...", 'info');
                 
                 try {
-                    // 1. Obtener el Gist
                     const headers = token ? { 'Authorization': `token ${token}` } : {};
                     const gistResponse = await fetchGistApi(GIST_API_URL + gistId, { headers });
                     
-                    // 2. Extraer el contenido del archivo de configuración
                     const file = gistResponse.files[GIST_FILENAME];
-                    if (!file) {
-                        throw new Error(`No se encontró el archivo "${GIST_FILENAME}" dentro del Gist.`);
-                    }
+                    if (!file) { throw new Error(`No se encontró el archivo "${GIST_FILENAME}".`); }
                     
                     const dataToImport = JSON.parse(file.content);
                     
-                    // 3. Validar y cargar los datos en Dexie
                     if (Array.isArray(dataToImport.branches)) {
-                        await db.table('branches').clear(); // Limpiar tabla antes de cargar
+                        await db.table('branches').clear(); 
                         await bulkPut('branches', dataToImport.branches);
                     }
                     if (Array.isArray(dataToImport.employees)) {
-                        await db.table('employees').clear(); // Limpiar tabla antes de cargar
+                        await db.table('employees').clear(); 
                         await bulkPut('employees', dataToImport.employees);
                     }
                     
-                    // 4. Refrescar UI
                     await refreshSetupLists();
-                    
                     showMessage("Importación de Configuración completada con éxito.", 'success');
-                } catch (error) {
-                    showMessage(`Error de Importación: ${error.message}`, 'error');
-                    console.error("Gist Import Error:", error);
-                }
+                } catch (error) { showMessage(`Error de Importación: ${error.message}`, 'error'); console.error(error); }
             }
             
-            // ------------------ Vista Empleados/Configuraciones (Setup) ------------------
-
+            // --- Setup ---
             function renderSetup(branches = [], employees = []) {
                 const branchOptions = branches.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
 
                 const branchListHtml = branches.map(b => 
                     `<li class="p-2 border-b last:border-b-0 flex justify-between items-center">
-                        ${b.name} (${b.lat != null ? b.lat.toFixed(3) : 'N/A'}, ${b.lng != null ? b.lng.toFixed(3) : 'N/A'}) 
+                        ${b.name} (${b.lat ? b.lat.toFixed(3) : 'N/A'}, ${b.lng ? b.lng.toFixed(3) : 'N/A'}) 
                         <button onclick="window.removeStoreItem('branches', ${b.id})" class="text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                     </li>`
                 ).join('') || '<li>No hay sucursales.</li>';
@@ -870,7 +774,6 @@
                     </li>`;
                 }).join('') || '<li>No hay empleados.</li>';
 
-                // Obtener valores guardados localmente para la interfaz de Gist (opcional, pero útil)
                 const savedToken = localStorage.getItem('githubToken') || '';
                 const savedGistId = localStorage.getItem('gistIdConfig') || '';
                 
@@ -923,7 +826,6 @@
                 `;
             }
 
-            /** 🔄 Configura los listeners para los formularios de Ajustes. */
             function setupFormListeners() {
                 document.getElementById('branch-form')?.addEventListener('submit', async (e) => {
                     e.preventDefault();
@@ -957,29 +859,19 @@
                 });
             }
 
-            /** Refresca las listas de Empleados y Sucursales. */
             async function refreshSetupLists() {
                 try {
                     branchList = await getAll('branches');
                     employeeList = await getAll('employees');
 
                     if (currentView === 'setup') {
-                        // Refrescar la vista si estamos en Setup
                         const contentArea = document.getElementById('content-area');
                         contentArea.innerHTML = renderSetup(branchList, employeeList); 
                         lucide.createIcons();
                         setupFormListeners(); 
                     }
-                    // Si estamos en dashboard, lo recargamos para actualizar las métricas
-                    if (currentView === 'dashboard') {
-                        showView('dashboard');
-                    }
-                    
-                    // Si estamos en track, actualizamos el estado del botón
-                    if (currentView === 'track') {
-                        updateClockButtonState();
-                    }
-
+                    if (currentView === 'track') { updateClockButtonState(); }
+                    if (currentView === 'dashboard') { showView('dashboard'); }
 
                     return true;
                 } catch (error) {
@@ -989,7 +881,6 @@
                 }
             }
 
-            /** Elimina un elemento de la base de datos y refresca la vista. */
             async function removeStoreItem(storeName, id) {
                 try {
                     await remove(storeName, id); 
@@ -1002,12 +893,10 @@
             }
             
             // =========================================================================
-            // INICIO DE LA APLICACIÓN
+            // E. INICIO DE LA APLICACIÓN
             // =========================================================================
 
-            /** Función de inicio de la aplicación (interna al IIFE). */
             async function initApp() {
-                // 🚀 Exportar funciones al scope global (window) para los eventos onclick
                 window.showView = showView;
                 window.handleClockAction = handleClockAction;
                 window.removeStoreItem = removeStoreItem;
@@ -1015,15 +904,14 @@
                 window.handleGistImport = handleGistImport;
                 window.hideMessage = hideMessage;
                 window.showMessage = showMessage;
-                window.updateClockButtonState = updateClockButtonState; 
-                window.getDistance = getDistance; // Exportar para posible uso en consola/debug
-                window.msToHms = msToHms; // Exportar utilidad de tiempo
+                window.updateClockButtonState = updateClockButtonState;
+                window.getDistance = getDistance;
+                window.msToHms = msToHms;
 
                 try {
                     document.getElementById('user-id-display').textContent = `ID de Usuario: ${userId.substring(0, 10)}... (Local)`;
 
                     await initDB();
-                    // Carga inicial de listas y luego muestra el Dashboard
                     await refreshSetupLists(); 
                     showView('dashboard');
 
@@ -1033,15 +921,12 @@
                 }
             };
             
-            // Inicia la aplicación al cargar el script.
-            // La función initApp() que es 'async' se llama inmediatamente, y el 
-            // await de initDB() dentro de ella se maneja correctamente.
             document.addEventListener('DOMContentLoaded', () => {
                 initApp();
-                lucide.createIcons(); // Crear iconos iniciales
+                lucide.createIcons();
             });
 
-        })(); // Fin del IIFE. Convertido a (async function() { ... })()
+        })();
     </script>
 </body>
 </html>
