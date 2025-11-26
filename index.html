@@ -642,3 +642,296 @@
             // ------------------ Vista Reportes ------------------
 
             async function loadReportData
+try {
+                    const entries = await getAll('timeEntries');
+                    const employees = await getAll('employees');
+                    const branches = await getAll('branches');
+
+                    const employeeMap = new Map(employees.map(e => [e.id, e]));
+                    const branchMap = new Map(branches.map(b => [b.id, b]));
+
+                    return { entries, employeeMap, branchMap };
+
+                } catch (error) {
+                    showMessage("Error al cargar datos para reportes.", 'error');
+                    console.error(error);
+                    return { entries: [], employeeMap: new Map(), branchMap: new Map() };
+                }
+            }
+
+            function renderReportsView(reportData) {
+                const contentArea = document.getElementById('content-area');
+                const { entries, employeeMap, branchMap } = reportData;
+
+                let entryListHtml = entries.slice().reverse().map(entry => { 
+                    const employee = employeeMap.get(entry.employeeId);
+                    const branch = branchMap.get(entry.branchId);
+                    const branchName = branch ? branch.name : 'Desconocida';
+                    const employeeName = employee ? employee.name : `ID: ${entry.employeeId}`;
+
+                    let distanceHtml = '';
+                    const hasInCoords = entry.inLat != null && entry.inLng != null;
+                    const hasBranchCoords = branch?.lat != null && branch?.lng != null;
+                    const geocercaRadio = 100;
+
+                    if (entry.clockOut && hasInCoords && hasBranchCoords) {
+                        const distanceIn = getDistance(entry.inLat, entry.inLng, branch.lat, branch.lng);
+                        const distanceOut = getDistance(entry.outLat, entry.outLng, branch.lat, branch.lng);
+                        const statusClassIn = distanceIn > geocercaRadio ? 'text-red-500 font-semibold' : 'text-green-500';
+                        const statusClassOut = distanceOut > geocercaRadio ? 'text-red-500 font-semibold' : 'text-green-500';
+
+                        distanceHtml = `
+                            <p class="text-xs text-gray-500 mt-1">
+                                Ubicación (IN): <span class="${statusClassIn}">${distanceIn.toFixed(2)}m</span> |
+                                Ubicación (OUT): <span class="${statusClassOut}">${distanceOut.toFixed(2)}m</span>
+                                (vs ${branchName})
+                            </p>
+                        `;
+                    }
+
+                    return `
+                        <div class="card p-4 border-l-4 ${entry.clockOut ? 'border-green-400' : 'border-yellow-400'}">
+                            <p class="font-bold text-gray-800">${employeeName}</p>
+                            <p class="text-sm text-gray-600">
+                                IN: ${new Date(entry.clockIn).toLocaleString()}
+                            </p>
+                            ${entry.clockOut ? `<p class="text-sm text-gray-600">OUT: ${new Date(entry.clockOut).toLocaleString()}</p>` : `<p class="text-sm text-yellow-600 font-semibold">Aún en turno</p>`}
+                            ${distanceHtml}
+                        </div>
+                    `;
+                }).join('');
+
+
+                contentArea.innerHTML = `
+                    <h2 class="text-3xl font-bold mb-6 text-gray-800">Reportes y Estadísticas</h2>
+                    
+                    <div class="card p-6 mb-6 bg-blue-50 border border-blue-200">
+                        <h3 class="text-xl font-semibold text-blue-800 mb-2">Resumen</h3>
+                        <p class="text-blue-700">Total de Registros: <span class="font-bold">${entries.length}</span></p>
+                        <p class="text-blue-700">Total de Empleados: <span class="font-bold">${employeeMap.size}</span></p>
+                    </div>
+
+                    <div class="card p-6">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-3 border-b pb-2">Historial de Registros (${entries.length})</h3>
+                        <div class="space-y-4">
+                            ${entryListHtml || '<p class="text-gray-500">No hay registros de tiempo en la base de datos.</p>'}
+                        </div>
+                    </div>
+                `;
+                lucide.createIcons();
+            }
+            
+            // ------------------ Vista Empleados/Configuraciones (Setup) ------------------
+
+            function renderSetup(branches = [], employees = []) {
+                const branchOptions = branches.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+
+                const branchListHtml = branches.map(b => 
+                    `<li class="p-2 border-b last:border-b-0 flex justify-between items-center">
+                        ${b.name} (${b.lat != null ? b.lat.toFixed(3) : 'N/A'}, ${b.lng != null ? b.lng.toFixed(3) : 'N/A'}) 
+                        <button onclick="window.removeStoreItem('branches', ${b.id})" class="text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </li>`
+                ).join('') || '<li>No hay sucursales.</li>';
+                
+                const employeeListHtml = employees.map(e => {
+                    const branch = branches.find(b => b.id === e.branchId);
+                    const branchName = branch ? branch.name : 'Sin Sucursal';
+                    return `<li class="p-2 border-b last:border-b-0 flex justify-between items-center">
+                        ${e.name} (${branchName}) 
+                        <button onclick="window.removeStoreItem('employees', ${e.id})" class="text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </li>`;
+                }).join('') || '<li>No hay empleados.</li>';
+                
+                return `
+                    <h2 class="text-3xl font-bold mb-6 text-gray-800">Ajustes y Administración</h2>
+
+                    <div class="card p-6 mb-6">
+                        <h3 class="text-xl font-semibold mb-4">Administrar Sucursales</h3>
+                        <form id="branch-form" class="space-y-4">
+                            <input type="text" id="branchName" name="branchName" placeholder="Nombre de Sucursal" required class="w-full border-gray-300 rounded-lg p-2">
+                            <div class="flex space-x-2">
+                                <input type="number" step="any" id="branchLat" name="branchLat" placeholder="Latitud (e.g., 19.43)" required class="w-1/2 border-gray-300 rounded-lg p-2">
+                                <input type="number" step="any" id="branchLng" name="branchLng" placeholder="Longitud (e.g., -99.13)" required class="w-1/2 border-gray-300 rounded-lg p-2">
+                            </div>
+                            <p class="text-sm text-gray-500">Nota: El radio de geocerca por defecto es 100m.</p>
+                            <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Guardar Sucursal</button>
+                        </form>
+
+                        <h3 class="text-xl font-semibold mt-8 mb-4">Administrar Empleados</h3>
+                        <form id="employee-form" class="space-y-4">
+                            <input type="text" id="employeeName" name="employeeName" placeholder="Nombre del Empleado" required class="w-full border-gray-300 rounded-lg p-2">
+                            <select id="employeeBranch" name="employeeBranch" required class="w-full border-gray-300 rounded-lg p-2">
+                                <option value="">Seleccionar Sucursal...</option>
+                                ${branchOptions}
+                            </select>
+                            <button type="submit" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700" ${branches.length === 0 ? 'disabled' : ''}>
+                                Guardar Empleado
+                            </button>
+                            ${branches.length === 0 ? '<p class="text-sm text-red-500">¡Necesita al menos una Sucursal para agregar Empleados!</p>' : ''}
+                        </form>
+                    </div>
+
+                    <div class="card p-6">
+                        <h3 class="text-xl font-semibold mb-3">Configuración de Sincronización (Gist)</h3>
+                        <p class="text-xs text-gray-500 mb-4">La sincronización con Gist de GitHub garantiza la persistencia. (Funcionalidad Placeholder)</p>
+                        <div class="space-y-3">
+                            <input type="text" id="githubToken" placeholder="Token de GitHub (Para Escritura)" class="w-full border-gray-300 rounded-lg p-2">
+                            <input type="text" id="gistIdEmployees" placeholder="ID Gist Empleados" class="w-full border-gray-300 rounded-lg p-2">
+                            <input type="text" id="gistIdBranches" placeholder="ID Gist Sucursales" class="w-full border-gray-300 rounded-lg p-2">
+                        </div>
+                        <div class="mt-4 flex justify-between">
+                            <button onclick="window.handleGistExport()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">Exportar (Gist)</button>
+                            <button onclick="window.handleGistImport()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">Importar (Gist)</button>
+                        </div>
+
+                        <h4 class="font-bold mt-6">Sucursales (${branches.length})</h4>
+                        <ul id="branch-list" class="list-none space-y-1 text-sm">${branchListHtml}</ul>
+                        <h4 class="font-bold mt-4">Empleados (${employees.length})</h4>
+                        <ul id="employee-list" class="list-none space-y-1 text-sm">${employeeListHtml}</ul>
+                    </div>
+                `;
+            }
+
+            /** 🔄 Configura los listeners para los formularios de Ajustes. */
+            function setupFormListeners() {
+                document.getElementById('branch-form')?.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const name = e.target.branchName.value.trim();
+                    const lat = parseFloat(e.target.branchLat.value);
+                    const lng = parseFloat(e.target.branchLng.value);
+
+                    if (name) {
+                        await put('branches', { name, lat, lng });
+                        e.target.reset(); 
+                        await refreshSetupLists(); 
+                        showMessage(`Sucursal "${name}" guardada.`, 'success');
+                    } else {
+                        showMessage("El nombre de la sucursal no puede estar vacío.", 'error');
+                    }
+                });
+
+                document.getElementById('employee-form')?.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const name = e.target.employeeName.value.trim();
+                    const branchId = parseInt(e.target.employeeBranch.value);
+
+                    if (name && branchId) {
+                        await put('employees', { name, branchId });
+                        e.target.reset(); 
+                        await refreshSetupLists(); 
+                        showMessage(`Empleado "${name}" guardado.`, 'success');
+                    } else {
+                        showMessage("Debe ingresar nombre y seleccionar una sucursal.", 'error');
+                    }
+                });
+            }
+
+            /** Refresca las listas de Empleados y Sucursales. */
+            async function refreshSetupLists() {
+                try {
+                    branchList = await getAll('branches');
+                    employeeList = await getAll('employees');
+
+                    if (currentView === 'setup') {
+                        // Refrescar la vista si estamos en Setup
+                        const contentArea = document.getElementById('content-area');
+                        contentArea.innerHTML = renderSetup(branchList, employeeList); 
+                        lucide.createIcons();
+                        setupFormListeners(); 
+                    }
+                    // Si estamos en dashboard, lo recargamos para actualizar las métricas
+                    if (currentView === 'dashboard') {
+                        showView('dashboard');
+                    }
+
+                    return true;
+                } catch (error) {
+                    showMessage("Error al actualizar las listas de Ajustes.", 'error');
+                    console.error(error);
+                    return false;
+                }
+            }
+
+            /** Elimina un elemento de la base de datos y refresca la vista. */
+            async function removeStoreItem(storeName, id) {
+                try {
+                    await remove(storeName, id); 
+                    await refreshSetupLists(); 
+                    showMessage(`Elemento eliminado de '${storeName}'.`, 'success');
+                } catch (error) {
+                    showMessage("Error al eliminar el elemento.", 'error');
+                    console.error(error);
+                }
+            }
+            
+            // ------------------ Lógica Gist (Placeholders) ------------------
+
+            async function handleGistExport() {
+                const token = document.getElementById('githubToken').value.trim();
+                const employeesGistId = document.getElementById('gistIdEmployees').value.trim();
+                const branchesGistId = document.getElementById('gistIdBranches').value.trim();
+
+                if (!token) {
+                    showMessage("Por favor, ingrese el Token de GitHub para exportar.", 'error');
+                    return;
+                }
+                
+                showMessage("Iniciando Exportación a Gist (Placeholder)...", 'info');
+                console.log("Token:", token, "Empleados Gist ID:", employeesGistId, "Sucursales Gist ID:", branchesGistId);
+            }
+
+            async function handleGistImport() {
+                const token = document.getElementById('githubToken').value.trim();
+                const employeesGistId = document.getElementById('gistIdEmployees').value.trim();
+                const branchesGistId = document.getElementById('gistIdBranches').value.trim();
+
+                if (!employeesGistId && !branchesGistId) {
+                    showMessage("Por favor, ingrese al menos un ID de Gist para importar.", 'error');
+                    return;
+                }
+                
+                showMessage("Iniciando Importación desde Gist (Placeholder)...", 'info');
+                console.log("Token:", token, "Empleados Gist ID:", employeesGistId, "Sucursales Gist ID:", branchesGistId);
+            }
+            
+            // =========================================================================
+            // INICIO DE LA APLICACIÓN
+            // =========================================================================
+
+            /** Función de inicio de la aplicación (interna al IIFE). */
+            async function initApp() {
+                // 🚀 Exportar funciones al scope global (window) para los eventos onclick
+                window.showView = showView;
+                window.handleClockAction = handleClockAction;
+                window.removeStoreItem = removeStoreItem;
+                window.handleGistExport = handleGistExport;
+                window.handleGistImport = handleGistImport;
+                window.hideMessage = hideMessage;
+                window.showMessage = showMessage;
+                window.updateClockButtonState = updateClockButtonState; 
+                window.getDistance = getDistance; // Exportar para posible uso en consola/debug
+                window.msToHms = msToHms; // Exportar utilidad de tiempo
+
+                try {
+                    document.getElementById('user-id-display').textContent = `ID de Usuario: ${userId.substring(0, 10)}... (Local)`;
+
+                    await initDB();
+                    // Carga inicial de listas y luego muestra el Dashboard
+                    await refreshSetupLists(); 
+                } catch (error) {
+                    showMessage("Fallo crítico al iniciar la aplicación. Ver consola.", 'error');
+                    console.error("App initialization failed:", error);
+                }
+            };
+            
+            // Inicia la aplicación al cargar el script
+            document.addEventListener('DOMContentLoaded', () => {
+                initApp();
+                lucide.createIcons(); // Crear iconos iniciales
+            });
+
+        })(); // Fin del IIFE
+    </script>
+</body>
+</html>
+
