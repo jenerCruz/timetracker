@@ -121,6 +121,8 @@
         } else if (viewName === 'reports') {
             const rdata = await loadReportData();
             renderReportsView(rdata);
+        } else if (viewName === 'map') { // NUEVO: Vista de Mapa
+            await renderMapView(); // Llamada a la función del nuevo map.js
         } else if (viewName === 'setup') {
             await renderSetupView();
         } else {
@@ -128,6 +130,58 @@
             renderDashboard(data);
         }
     }
+
+    function wireNavButtons() {
+        document.getElementById('nav-dashboard').addEventListener('click', () => showView('dashboard'));
+        document.getElementById('nav-track').addEventListener('click', () => showView('track'));
+        document.getElementById('nav-reports').addEventListener('click', () => showView('reports'));
+        // NUEVO BOTÓN DE MAPA: Asumiendo que existe en el HTML
+        const navMapButton = document.getElementById('nav-map');
+        if (navMapButton) {
+            navMapButton.addEventListener('click', () => showView('map'));
+        }
+        document.getElementById('nav-setup').addEventListener('click', () => showView('setup'));
+    }
+
+    async function initApp() {
+        window.showView = showView; // expose
+        window.put = window.put; // already from db.js
+        window.getAll = window.getAll;
+        window.remove = window.remove;
+        window.appDB = window.appDB;
+        window.getSetting = window.getSetting;
+// EXPONER
+        window.putSetting = window.putSetting; 
+// EXPONER
+
+        // expose helper functions (already attached by utils)
+        window.msToHms = window.msToHms;
+        window.getDistance = window.getDistance;
+        window.getCurrentLocation = window.getCurrentLocation;
+        window.showMessage = window.showMessage;
+        window.hideMessage = window.hideMessage;
+
+        try {
+            const userId = 'anon-' + (localStorage.getItem('anonId') || crypto.randomUUID());
+            localStorage.setItem('anonId', userId);
+            document.getElementById('user-id-display').textContent = `ID de Usuario: ${userId.substring(0, 10)}... (Local)`;
+        } catch (e) {
+            console.warn("crypto.randomUUID puede no estar disponible:", e);
+        }
+
+        wireNavButtons();
+        
+        // NUEVO: Iniciar sincronización de ubicación
+        if (window.startLocationSync) {
+            window.startLocationSync();
+        }
+
+        // initial view
+        await showView('dashboard');
+    }
+
+// ... (El resto del código existente) ...
+
 
     function wireNavButtons() {
         document.getElementById('nav-dashboard').addEventListener('click', () => showView('dashboard'));
