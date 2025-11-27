@@ -11,7 +11,7 @@ const ASSETS = [
   '/assets/js/reports.js',
   '/assets/js/setup.js',
   '/assets/js/app.js',
-  '/assets/js/maps.js'
+  '/assets/js/map.js'
   
   
   // agrega tus css y fonts locales aquí
