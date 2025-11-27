@@ -6,7 +6,8 @@
     <title>Time Tracker PWA (Offline Ready)</title>
 
     <!-- Nota: para offline real, reemplaza este CDN por un tailwind.css local en /assets/css/tailwind.css -->
-    <link href="./src/style.css" rel="stylesheet">
+    <link href="./src/output.css" rel="stylesheet">
+       <script src="./assets/js/lucide.min.js"></script>
 
     <!-- Fonts: para offline descargar Inter y servir localmente; aquí usa Google por conveniencia -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -77,7 +78,6 @@
     <!-- LÓGICA: order matters -->
     <!-- 1) dependencias (Dexie + Lucide) -->
     <script src="./assets/js/dexie.js"></script>
-    <script src="./assets/js/lucide.min.js"></script>
 
     <!-- 2) módulos locales -->
     <script src="./assets/js/db.js"></script>
