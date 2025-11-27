@@ -1,3 +1,4 @@
+
 // assets/js/app.js
 (function () {
     let currentView = 'dashboard';
