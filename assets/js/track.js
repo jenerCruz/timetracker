@@ -1,162 +1,133 @@
 // assets/js/track.js
+// Módulo para fichaje: clockIn y clockOut, guarda clockInCoords y storeId (si aplica)
+
 (function () {
-    // Dependencias: appDB, getAll, put, getCurrentLocation, getDistance, showMessage, hideMessage, safeCreateIcons
-    async function renderTrackView() {
-        const contentArea = document.getElementById('content-area');
-        const branches = await getAll('branches');
-        const employees = await getAll('employees');
+  // Renderiza la vista de registro/fichaje
+  async function renderTrackView() {
+    const content = document.getElementById('content-area');
+    const employees = await (window.getAll ? window.getAll('employees') : []);
+    const stores = await (window.getAll ? window.getAll('stores') : []);
+    const employeeOptions = (employees || []).map(e => `<option value="${e.id}">${e.name}</option>`).join('');
+    const storeOptions = (stores || []).map(s => `<option value="${s.id}">${s.name}</option>`).join('');
 
-        // Ultimos entries
-        const lastEntries = await appDB.timeEntries.orderBy('id').reverse().limit(8).toArray();
+    content.innerHTML = `
+      <h2 class="text-2xl font-bold mb-4 text-gray-800">Fichar</h2>
+      <div class="card p-4">
+        <form id="clock-form" class="space-y-3">
+          <div>
+            <label class="text-sm text-gray-700">Empleado</label>
+            <select id="clock-employee" class="w-full p-2 border rounded" required>
+              <option value="">-- Seleccionar empleado --</option>
+              ${employeeOptions}
+            </select>
+          </div>
+          <div>
+            <label class="text-sm text-gray-700">Sucursal (opcional)</label>
+            <select id="clock-store" class="w-full p-2 border rounded">
+              <option value="">-- Seleccionar sucursal --</option>
+              ${storeOptions}
+            </select>
+          </div>
 
-        const employeeMap = new Map((employees || []).map(e => [e.id, e.name]));
-        const employeeOptions = (employees || []).map(e => `<option value="${e.id}">${e.name} (${branches.find(b => b.id === e.branchId)?.name || 'Sin Sucursal'})</option>`).join('');
+          <div class="flex gap-2">
+            <button id="btn-clock-in" class="p-2 bg-blue-600 text-white rounded flex-1">Clock In</button>
+            <button id="btn-clock-out" class="p-2 bg-gray-100 rounded flex-1">Clock Out</button>
+          </div>
+        </form>
 
-        const latestEntriesHtml = (lastEntries || []).map(entry => {
-            const status = entry.clockOut ? 'Finalizado' : 'En turno';
-            const statusColor = entry.clockOut ? 'text-green-600' : 'text-yellow-600 font-semibold';
-            const employeeName = employeeMap.get(entry.employeeId) || 'Desconocido';
-            const timeIn = new Date(entry.clockIn).toLocaleTimeString();
-            const timeOut = entry.clockOut ? new Date(entry.clockOut).toLocaleTimeString() : 'N/A';
-            return `
-                <div class="card p-3 border-l-4 ${entry.clockOut ? 'border-green-400' : 'border-yellow-400'}">
-                    <p class="font-bold text-gray-800">${employeeName}</p>
-                    <p class="text-sm text-gray-600">IN: ${timeIn} | OUT: ${timeOut}</p>
-                    <p class="text-sm ${statusColor}">${status}</p>
-                </div>
-            `;
-        }).join('');
+        <div id="recent-entries" class="mt-4 text-sm text-gray-700"></div>
+      </div>
+    `;
+    safeCreateIcons && safeCreateIcons();
 
-        contentArea.innerHTML = `
-            <h2 class="text-3xl font-bold mb-6 text-gray-800">Registro de Tiempo</h2>
-            <div class="card p-6 mb-6">
-                <label for="employee-select" class="block text-sm font-medium text-gray-700 mb-2">Seleccionar Empleado</label>
-                <select id="employee-select" class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 p-3">
-                    <option value="">-- Selecciona --</option>
-                    ${employeeOptions}
-                </select>
+    document.getElementById('btn-clock-in').addEventListener('click', handleClockIn);
+    document.getElementById('btn-clock-out').addEventListener('click', handleClockOut);
 
-                <div class="mt-6 text-center">
-                    <button id="main-clock-btn"
-                            class="clock-button w-full max-w-sm mx-auto text-white font-bold py-4 px-6 rounded-xl shadow-lg bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-opacity-50 transition duration-150 ease-in-out">
-                        <i data-lucide="log-in" class="w-6 h-6 inline mr-2"></i>
-                        Registrar Entrada (Clock In)
-                    </button>
-                </div>
+    await renderRecentEntries();
+  }
 
-                <div id="status-message" class="mt-6 p-3 text-sm text-center bg-blue-50 text-blue-800 rounded-lg hidden">
-                    Obteniendo ubicación... Por favor, espere.
-                </div>
-            </div>
+  async function handleClockIn(ev) {
+    ev.preventDefault();
+    const empSel = document.getElementById('clock-employee');
+    const storeSel = document.getElementById('clock-store');
+    const employeeId = empSel.value;
+    const storeId = storeSel.value || null;
+    if (!employeeId) { showMessage('Selecciona un empleado', 'error'); return; }
 
-            <h3 class="text-xl font-semibold text-gray-800 mb-3">Últimos Registros (Globales)</h3>
-            <div id="latest-entries" class="space-y-3">
-                 ${latestEntriesHtml || '<p class="text-gray-500">No hay registros de tiempo.</p>'}
-            </div>
-        `;
-        safeCreateIcons();
-        document.getElementById('employee-select').addEventListener('change', updateClockButtonState);
-        document.getElementById('main-clock-btn').addEventListener('click', () => {
-            // accion depende del estado actual (IN o OUT)
-            const curr = document.getElementById('main-clock-btn').getAttribute('data-action') || 'IN';
-            handleClockAction(curr);
-        });
-        await updateClockButtonState();
+    const pos = await getCurrentPositionSafe();
+    const clockInCoords = pos ? { lat: pos.lat, lng: pos.lng } : null;
+
+    const entry = {
+      id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random(),
+      employeeId,
+      storeId,
+      clockIn: Date.now(),
+      clockInCoords
+    };
+
+    try {
+      await put('timeEntries', entry);
+      showMessage('Clock In registrado', 'success');
+      // opcional: exponer anonId como empleadoId localmente
+      localStorage.setItem('anonId', employeeId);
+      await renderRecentEntries();
+    } catch (e) {
+      console.warn('handleClockIn err', e);
+      showMessage('Error al guardar clock in', 'error');
     }
+  }
 
-    async function updateClockButtonState() {
-        const $select = document.getElementById('employee-select');
-        const $button = document.getElementById('main-clock-btn');
-        if (!$select || !$button) return;
+  async function handleClockOut(ev) {
+    ev.preventDefault();
+    const empSel = document.getElementById('clock-employee');
+    const employeeId = empSel.value;
+    if (!employeeId) { showMessage('Selecciona un empleado', 'error'); return; }
 
-        const employeeId = parseInt($select.value);
-        if (isNaN(employeeId)) {
-            $button.setAttribute('data-action', 'OUT');
-            $button.innerHTML = `<i data-lucide="log-in" class="w-6 h-6 inline mr-2"></i> Registrar Entrada (Clock In)`;
-            safeCreateIcons();
-            return;
-        }
+    // buscar último entry sin clockOut
+    const entries = await (window.getAll ? window.getAll('timeEntries') : []);
+    const last = (entries || []).filter(e => String(e.employeeId) === String(employeeId) && !e.clockOut).sort((a,b)=> (b.clockIn||0) - (a.clockIn||0))[0];
+    if (!last) { showMessage('No hay un clock-in abierto para este empleado', 'error'); return; }
 
-        let openEntry = null;
-        try {
-            openEntry = await appDB.timeEntries
-                .where('employeeId').equals(employeeId)
-                .and(e => e.clockOut === null || e.clockOut === undefined)
-                .last();
-        } catch (e) {
-            // posible que no exista
-            openEntry = null;
-        }
+    last.clockOut = Date.now();
 
-        const status = openEntry ? 'IN' : 'OUT';
-        const buttonText = status === 'IN' ? 'Registrar Salida (Clock Out)' : 'Registrar Entrada (Clock In)';
-        const buttonColor = status === 'IN' ? 'bg-red-500 hover:bg-red-600' : 'bg-green-600 hover:bg-green-700';
-        const buttonIcon = status === 'IN' ? 'log-out' : 'log-in';
-
-        $button.setAttribute('data-action', status === 'IN' ? 'OUT' : 'IN'); // action to perform if clicked
-        $button.className = `clock-button w-full max-w-sm mx-auto text-white font-bold py-4 px-6 rounded-xl shadow-lg ${buttonColor} focus:outline-none focus:ring-4 focus:ring-opacity-50 transition duration-150 ease-in-out`;
-        $button.innerHTML = `<i data-lucide="${buttonIcon}" class="w-6 h-6 inline mr-2"></i> ${buttonText}`;
-        safeCreateIcons();
+    try {
+      await put('timeEntries', last);
+      showMessage('Clock Out registrado', 'success');
+      await renderRecentEntries();
+    } catch (e) {
+      console.warn('handleClockOut err', e);
+      showMessage('Error al registrar clock out', 'error');
     }
+  }
 
-    async function handleClockAction(requestedAction) {
-        // requestedAction: 'IN' (means we should create an entry) or 'OUT' (means close)
-        const select = document.getElementById('employee-select');
-        const statusEl = document.getElementById('status-message');
-        const employeeId = parseInt(select.value);
-        if (isNaN(employeeId)) { showMessage('Empleado no seleccionado.', 'error'); return; }
-        const employee = (await getAll('employees')).find(e => e.id === employeeId);
-        if (!employee) { showMessage('Empleado no encontrado.', 'error'); return; }
+  async function renderRecentEntries() {
+    const entries = await (window.getAll ? window.getAll('timeEntries') : []);
+    const employees = await (window.getAll ? window.getAll('employees') : []);
+    const last10 = (entries || []).sort((a,b)=> (b.clockIn||0)-(a.clockIn||0)).slice(0,10);
+    const html = (last10 || []).map(e => {
+      const emp = employees.find(x => String(x.id) === String(e.employeeId)) || { name: 'Desconocido' };
+      const inTime = e.clockIn ? new Date(e.clockIn).toLocaleString() : '-';
+      const outTime = e.clockOut ? new Date(e.clockOut).toLocaleString() : '-';
+      const coords = e.clockInCoords ? `${e.clockInCoords.lat.toFixed(4)},${e.clockInCoords.lng.toFixed(4)}` : 'sin coords';
+      return `<div class="p-2 border-b flex justify-between items-center"><div><strong>${emp.name}</strong><div class="text-xs text-gray-500">In: ${inTime} / Out: ${outTime} / ${coords}</div></div></div>`;
+    }).join('') || '<p class="text-gray-500">Sin registros recientes.</p>';
+    const el = document.getElementById('recent-entries');
+    if (el) el.innerHTML = html;
+  }
 
-        statusEl.textContent = 'Obteniendo ubicación... Por favor, espere.';
-        statusEl.classList.remove('hidden');
+  async function getCurrentPositionSafe() {
+    try {
+      if (window.getCurrentLocation) {
+        const p = await window.getCurrentLocation();
+        if (p && typeof p.lat === 'number' && typeof p.lng === 'number') return p;
+      }
+      return await new Promise((resolve) => {
+        if (!navigator.geolocation) return resolve(null);
+        navigator.geolocation.getCurrentPosition(po => resolve({ lat: po.coords.latitude, lng: po.coords.longitude }), () => resolve(null), { enableHighAccuracy: true, timeout: 10000 });
+      });
+    } catch (e) { return null; }
+  }
 
-        try {
-            const location = await getCurrentLocation();
-            statusEl.classList.add('hidden');
-
-            if (requestedAction === 'IN') {
-                // create entry
-                const entry = {
-                    employeeId: employeeId,
-                    branchId: employee.branchId || null,
-                    clockIn: Date.now(),
-                    inLat: location.lat,
-                    inLng: location.lng,
-                    clockOut: null
-                };
-                await put('timeEntries', entry);
-                showMessage(`Entrada registrada para ${employee.name}.`, 'success');
-            } else {
-                // find open entry
-                const openEntry = await appDB.timeEntries
-                    .where('employeeId').equals(employeeId)
-                    .and(e => e.clockOut === null || e.clockOut === undefined)
-                    .last();
-
-                if (!openEntry) {
-                    showMessage('No se encontró una entrada abierta para este empleado.', 'error');
-                    return;
-                }
-
-                openEntry.clockOut = Date.now();
-                openEntry.outLat = location.lat;
-                openEntry.outLng = location.lng;
-                await put('timeEntries', openEntry);
-                showMessage(`Salida registrada para ${employee.name}.`, 'success');
-            }
-
-            // actualizar vista
-            await renderTrackView();
-        } catch (error) {
-            statusEl.classList.add('hidden');
-            console.error(error);
-            showMessage(`Error al registrar: ${error?.message || error}`, 'error');
-        }
-    }
-
-    // export functions to global so app.js can call them
-    window.renderTrackView = renderTrackView;
-    window.updateClockButtonState = updateClockButtonState;
-    window.handleClockAction = handleClockAction;
+  // export
+  window.renderTrackView = renderTrackView;
 })();
