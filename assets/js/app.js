@@ -109,6 +109,7 @@
         safeCreateIcons();
     }
 
+    // FUNCIÓN showView CORREGIDA: Incluye la nueva vista 'map'
     async function showView(viewName) {
         currentView = viewName;
         updateNavIcons(viewName);
@@ -121,8 +122,8 @@
         } else if (viewName === 'reports') {
             const rdata = await loadReportData();
             renderReportsView(rdata);
-        } else if (viewName === 'map') { // NUEVO: Vista de Mapa
-            await renderMapView(); // Llamada a la función del nuevo map.js
+        } else if (viewName === 'map') { // NUEVO: Llama a la función de map.js
+            await renderMapView();
         } else if (viewName === 'setup') {
             await renderSetupView();
         } else {
@@ -131,28 +132,32 @@
         }
     }
 
+    // FUNCIÓN wireNavButtons CORREGIDA: Incluye el botón 'nav-map'
     function wireNavButtons() {
         document.getElementById('nav-dashboard').addEventListener('click', () => showView('dashboard'));
         document.getElementById('nav-track').addEventListener('click', () => showView('track'));
         document.getElementById('nav-reports').addEventListener('click', () => showView('reports'));
-        // NUEVO BOTÓN DE MAPA: Asumiendo que existe en el HTML
+        
+        // CORRECCIÓN: Conectar el nuevo botón de Mapa
         const navMapButton = document.getElementById('nav-map');
         if (navMapButton) {
             navMapButton.addEventListener('click', () => showView('map'));
         }
+        
         document.getElementById('nav-setup').addEventListener('click', () => showView('setup'));
     }
 
+    // FUNCIÓN initApp CORREGIDA: Expone getSetting/putSetting e inicia la sincronización de ubicación
     async function initApp() {
         window.showView = showView; // expose
         window.put = window.put; // already from db.js
         window.getAll = window.getAll;
         window.remove = window.remove;
         window.appDB = window.appDB;
-        window.getSetting = window.getSetting;
-// EXPONER
-        window.putSetting = window.putSetting; 
-// EXPONER
+
+        // NUEVAS EXPOSICIONES DE db.js: CRUCIALES PARA setup.js
+        window.getSetting = window.getSetting; 
+        window.putSetting = window.putSetting;
 
         // expose helper functions (already attached by utils)
         window.msToHms = window.msToHms;
@@ -171,48 +176,11 @@
 
         wireNavButtons();
         
-        // NUEVO: Iniciar sincronización de ubicación
+        // NUEVO: Iniciar sincronización de ubicación (desde map.js)
         if (window.startLocationSync) {
             window.startLocationSync();
         }
 
-        // initial view
-        await showView('dashboard');
-    }
-
-// ... (El resto del código existente) ...
-
-
-    function wireNavButtons() {
-        document.getElementById('nav-dashboard').addEventListener('click', () => showView('dashboard'));
-        document.getElementById('nav-track').addEventListener('click', () => showView('track'));
-        document.getElementById('nav-reports').addEventListener('click', () => showView('reports'));
-        document.getElementById('nav-setup').addEventListener('click', () => showView('setup'));
-    }
-
-    async function initApp() {
-        window.showView = showView; // expose
-        window.put = window.put; // already from db.js
-        window.getAll = window.getAll;
-        window.remove = window.remove;
-        window.appDB = window.appDB;
-
-        // expose helper functions (already attached by utils)
-        window.msToHms = window.msToHms;
-        window.getDistance = window.getDistance;
-        window.getCurrentLocation = window.getCurrentLocation;
-        window.showMessage = window.showMessage;
-        window.hideMessage = window.hideMessage;
-
-        try {
-            const userId = 'anon-' + (localStorage.getItem('anonId') || crypto.randomUUID());
-            localStorage.setItem('anonId', userId);
-            document.getElementById('user-id-display').textContent = `ID de Usuario: ${userId.substring(0, 10)}... (Local)`;
-        } catch (e) {
-            console.warn("crypto.randomUUID puede no estar disponible:", e);
-        }
-
-        wireNavButtons();
         // initial view
         await showView('dashboard');
     }
