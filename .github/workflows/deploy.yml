@@ -1,0 +1,27 @@
+name: Deploy to GitHub Pages
+
+on:
+  workflow_dispatch:  # Solo se ejecuta cuando tú lo activas manualmente
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # Aquí va la carpeta donde está tu index.html
+          # Si tu index está en la raíz, es ./
+          # Si está en /public → cámbialo
+          path: ./
+
+      - name: Deploy
+        uses: actions/deploy-pages@v4
