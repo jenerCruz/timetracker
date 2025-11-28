@@ -1,121 +1,215 @@
 // assets/js/setup.js
+// Vista de administración protegida por PIN (admin) con env.js support y Gist export/import
+
 (function () {
-    async function renderSetupView() {
-        const branches = await getAll('branches');
-        const employees = await getAll('employees');
+  const ADMIN_KEY = 'app_admin_hash_v1'; // donde guardamos hash del PIN
+  let isAdmin = false;
 
-        const branchOptions = (branches || []).map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+  // helper: sha256 hex
+  async function sha256Hex(text) {
+    if (!window.crypto || !window.crypto.subtle) return btoa(text);
+    const enc = new TextEncoder().encode(text);
+    const hash = await crypto.subtle.digest('SHA-256', enc);
+    return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  }
 
-        const branchListHtml = (branches || []).map(b => 
-            `<li class="p-2 border-b last:border-b-0 flex justify-between items-center">
-                ${b.name} (${b.lat ? b.lat.toFixed(3) : 'N/A'}, ${b.lng ? b.lng.toFixed(3) : 'N/A'}) 
-                <button data-id="${b.id}" data-store="branches" class="remove-btn text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-            </li>`
-        ).join('') || '<li>No hay sucursales.</li>';
+  // init from env
+  (async function initFromEnv() {
+    try {
+      if (window.__INITIAL_ADMIN_SECRET__) {
+        const h = await sha256Hex(String(window.__INITIAL_ADMIN_SECRET__));
+        await putSetting('adminPinHash', h);
+        try { delete window.__INITIAL_ADMIN_SECRET__; } catch (e) { window.__INITIAL_ADMIN_SECRET__ = undefined; }
+      }
+    } catch (e) { console.warn('initFromEnv', e); }
+  })();
 
-        const employeeListHtml = (employees || []).map(e => {
-            const branch = branches.find(b => b.id === e.branchId);
-            const branchName = branch ? branch.name : 'Sin Sucursal';
-            return `<li class="p-2 border-b last:border-b-0 flex justify-between items-center">
-                ${e.name} (${branchName}) 
-                <button data-id="${e.id}" data-store="employees" class="remove-btn text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-            </li>`;
-        }).join('') || '<li>No hay empleados.</li>';
-
-        const savedToken = localStorage.getItem('githubToken') || '';
-        const savedGistId = localStorage.getItem('gistIdConfig') || '';
-
-        const contentArea = document.getElementById('content-area');
-        contentArea.innerHTML = `
-            <h2 class="text-3xl font-bold mb-6 text-gray-800">Ajustes y Administración</h2>
-
-            <div class="card p-6 mb-6">
-                <h3 class="text-xl font-semibold mb-4">Administrar Sucursales</h3>
-                <form id="branch-form" class="space-y-4">
-                    <input type="text" id="branchName" name="branchName" placeholder="Nombre de Sucursal" required class="w-full border-gray-300 rounded-lg p-2">
-                    <div class="flex space-x-2">
-                        <input type="number" step="any" id="branchLat" name="branchLat" placeholder="Latitud (e.g., 19.43)" required class="w-1/2 border-gray-300 rounded-lg p-2">
-                        <input type="number" step="any" id="branchLng" name="branchLng" placeholder="Longitud (e.g., -99.13)" required class="w-1/2 border-gray-300 rounded-lg p-2">
-                    </div>
-                    <p class="text-sm text-gray-500">Nota: El radio de geocerca por defecto es 100m.</p>
-                    <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Guardar Sucursal</button>
-                </form>
-
-                <h3 class="text-xl font-semibold mt-8 mb-4">Administrar Empleados</h3>
-                <form id="employee-form" class="space-y-4">
-                    <input type="text" id="employeeName" name="employeeName" placeholder="Nombre del Empleado" required class="w-full border-gray-300 rounded-lg p-2">
-                    <select id="employeeBranch" name="employeeBranch" required class="w-full border-gray-300 rounded-lg p-2">
-                        <option value="">Seleccionar Sucursal...</option>
-                        ${branchOptions}
-                    </select>
-                    <button type="submit" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700" ${branches.length === 0 ? 'disabled' : ''}>
-                        Guardar Empleado
-                    </button>
-                    ${branches.length === 0 ? '<p class="text-sm text-red-500">¡Necesita al menos una Sucursal para agregar Empleados!</p>' : ''}
-                </form>
-            </div>
-
-            <div class="card p-6">
-                <h3 class="text-xl font-semibold mb-3">Configuración de Sincronización (GitHub Gist)</h3>
-                <p class="text-sm text-gray-500 mb-4">Ingrese su Token y el ID del Gist único para guardar la configuración de empleados y sucursales.</p>
-                <div class="space-y-3">
-                    <input type="text" id="githubToken" onchange="localStorage.setItem('githubToken', this.value)" value="${savedToken}" placeholder="Token de GitHub (Necesario para Escritura)" class="w-full border-gray-300 rounded-lg p-2">
-                    <input type="text" id="gistIdConfig" onchange="localStorage.setItem('gistIdConfig', this.value)" value="${savedGistId}" placeholder="ID Gist Configuración (Ej: d5d7a8b...)" class="w-full border-gray-300 rounded-lg p-2">
-                </div>
-                <div class="mt-4 flex justify-between">
-                    <button id="gist-export" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">Exportar (Guardar)</button>
-                    <button id="gist-import" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">Importar (Cargar)</button>
-                </div>
-
-                <h4 class="font-bold mt-6">Sucursales (${branches.length})</h4>
-                <ul id="branch-list" class="list-none space-y-1 text-sm">${branchListHtml}</ul>
-                <h4 class="font-bold mt-4">Empleados (${employees.length})</h4>
-                <ul id="employee-list" class="list-none space-y-1 text-sm">${employeeListHtml}</ul>
-            </div>
-        `;
-        safeCreateIcons();
-
-        // listeners
-        document.getElementById('branch-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const name = e.target.branchName.value.trim();
-            const lat = parseFloat(e.target.branchLat.value);
-            const lng = parseFloat(e.target.branchLng.value);
-            if (!name) { showMessage("El nombre de la sucursal no puede estar vacío.", 'error'); return; }
-            await put('branches', { name, lat, lng });
-            e.target.reset();
-            showMessage(`Sucursal "${name}" guardada.`, 'success');
-            await renderSetupView();
-        });
-
-        document.getElementById('employee-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const name = e.target.employeeName.value.trim();
-            const branchId = parseInt(e.target.employeeBranch.value);
-            if (!name || !branchId) { showMessage("Debe ingresar nombre y seleccionar una sucursal.", 'error'); return; }
-            await put('employees', { name, branchId });
-            e.target.reset(); 
-            showMessage(`Empleado "${name}" guardado.`, 'success');
-            await renderSetupView();
-        });
-
-        // remove buttons
-        document.querySelectorAll('.remove-btn').forEach(btn => {
-            btn.addEventListener('click', async (ev) => {
-                const id = parseInt(ev.currentTarget.dataset.id);
-                const store = ev.currentTarget.dataset.store;
-                if (!confirm('¿Eliminar elemento?')) return;
-                await remove(store, id);
-                showMessage('Elemento eliminado.', 'success');
-                await renderSetupView();
-            });
-        });
-
-        // gist actions (simple wrappers)
-        document.getElementById('gist-export').addEventListener('click', handleGistExport);
-        document.getElementById('gist-import').addEventListener('click', handleGistImport);
+  async function renderSetupView() {
+    const content = document.getElementById('content-area');
+    const adminHash = await getSetting('adminPinHash');
+    if (isAdmin) {
+      await renderAdminPanel();
+      return;
     }
 
-    // export
-    window.renderSetupView = renderSetupView;
+    content.innerHTML = `
+      <h2 class="text-2xl font-bold mb-4 text-gray-800">Ajustes</h2>
+      <div class="card p-4 mb-4">
+        <h3 class="font-semibold mb-2">Sincronización (Gist)</h3>
+        <p class="text-sm text-gray-600 mb-2">Token y Gist ID deben estar en env.js (privado). Puedes usar los botones para exportar/importar.</p>
+        <div class="flex gap-2">
+          <button id="btn-export-gist" class="p-2 bg-indigo-600 text-white rounded">Exportar a Gist</button>
+          <button id="btn-import-gist" class="p-2 bg-green-600 text-white rounded">Importar desde Gist</button>
+        </div>
+      </div>
+
+      <div class="card p-4 mb-4">
+        <h3 class="font-semibold mb-2">Acceso Administrador</h3>
+        <p class="text-sm text-gray-600 mb-2">${adminHash ? 'Ingrese su PIN' : 'Establezca un PIN admin (mínimo 4 dígitos)'}</p>
+        <form id="admin-form">
+          <input id="admin-pin-input" type="password" minlength="4" placeholder="PIN administrador" class="w-full p-2 border rounded mb-2" required/>
+          <button class="p-2 bg-blue-600 text-white rounded w-full" type="submit">${adminHash ? 'Acceder' : 'Guardar PIN'}</button>
+        </form>
+      </div>
+
+      <div id="admin-area-placeholder"></div>
+    `;
+    safeCreateIcons && safeCreateIcons();
+    document.getElementById('admin-form').addEventListener('submit', onAdminSubmit);
+    document.getElementById('btn-export-gist').addEventListener('click', () => {
+      if (window.exportAllToGist) window.exportAllToGist();
+      else showMessage('Función exportAllToGist no disponible', 'error');
+    });
+    document.getElementById('btn-import-gist').addEventListener('click', () => {
+      if (window.importAllFromGist) window.importAllFromGist();
+      else showMessage('Función importAllFromGist no disponible', 'error');
+    });
+  }
+
+  async function onAdminSubmit(ev) {
+    ev.preventDefault();
+    const v = document.getElementById('admin-pin-input').value.trim();
+    if (!v || v.length < 4) { showMessage('PIN inválido', 'error'); return; }
+    const storedHash = await getSetting('adminPinHash');
+    const h = await sha256Hex(v);
+    if (!storedHash) {
+      await putSetting('adminPinHash', h);
+      isAdmin = true;
+      showMessage('PIN guardado. Acceso concedido.', 'success');
+      await renderAdminPanel();
+    } else if (h === storedHash) {
+      isAdmin = true;
+      showMessage('Acceso concedido.', 'success');
+      await renderAdminPanel();
+    } else {
+      showMessage('PIN incorrecto.', 'error');
+    }
+  }
+
+  // PANEL ADMIN: administrar stores y employees y ver slerts
+  async function renderAdminPanel() {
+    const stores = await (window.getAll ? window.getAll('stores') : []);
+    const employees = await (window.getAll ? window.getAll('employees') : []);
+    const slerts = await (window.getAll ? window.getAll('slerts') : []);
+    const storeOptions = (stores || []).map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+
+    const storeList = (stores||[]).map(s=>`<li class="p-2 border-b flex justify-between items-center">${s.name} (${s.lat?.toFixed(4)||'N/A'}, ${s.lng?.toFixed(4)||'N/A'}) <button data-id="${s.id}" data-store="stores" class="remove-btn text-red-500">Eliminar</button></li>`).join('')||'<li>No hay stores</li>';
+    const empList = (employees||[]).map(e=>`<li class="p-2 border-b flex justify-between items-center">${e.name} ${e.storeId?`(<small>${(stores.find(s=>s.id===e.storeId)||{}).name||''}</small>)`:''} <button data-id="${e.id}" data-store="employees" class="remove-btn text-red-500">Eliminar</button></li>`).join('')||'<li>No hay empleados</li>';
+    const alertsHtml = (slerts||[]).sort((a,b)=>b.timestamp-a.timestamp).slice(0,50).map(a=>`<div class="p-2 border-b"><div class="text-xs text-gray-600">${new Date(a.timestamp).toLocaleString()} — ${Math.round(a.distanceMeters||0)} m — ${a.note||''}</div></div>`).join('') || '<p class="text-gray-500">Sin alertas</p>';
+
+    const html = `
+      <div class="card p-4 mb-4">
+        <div class="flex justify-between items-center">
+          <h3 class="font-semibold">Administración</h3>
+          <div>
+            <button id="btn-admin-logout" class="p-2 bg-red-500 text-white rounded">Cerrar sesión</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card p-4 mb-4">
+        <h4 class="font-semibold mb-2">Crear Sucursal</h4>
+        <form id="store-form" class="space-y-2">
+          <input id="store-name" placeholder="Nombre" class="w-full p-2 border rounded" required/>
+          <div class="flex gap-2">
+            <input id="store-lat" placeholder="Lat" class="p-2 border rounded flex-1" required/>
+            <input id="store-lng" placeholder="Lng" class="p-2 border rounded flex-1" required/>
+            <button id="btn-capture-store" type="button" class="p-2 bg-indigo-600 text-white rounded">Capturar</button>
+          </div>
+          <button class="p-2 bg-green-600 text-white rounded">Guardar sucursal</button>
+        </form>
+      </div>
+
+      <div class="card p-4 mb-4">
+        <h4 class="font-semibold mb-2">Crear Empleado</h4>
+        <form id="emp-form" class="space-y-2">
+          <input id="emp-name" placeholder="Nombre" class="w-full p-2 border rounded" required/>
+          <select id="emp-store" class="w-full p-2 border rounded">${storeOptions}</select>
+          <button class="p-2 bg-green-600 text-white rounded">Guardar empleado</button>
+        </form>
+      </div>
+
+      <div class="card p-4 mb-4">
+        <h4 class="font-semibold">Sucursales</h4>
+        <ul id="store-list" class="mt-2">${storeList}</ul>
+      </div>
+
+      <div class="card p-4 mb-4">
+        <h4 class="font-semibold">Empleados</h4>
+        <ul id="emp-list" class="mt-2">${empList}</ul>
+      </div>
+
+      <div class="card p-4">
+        <h4 class="font-semibold">Alertas recientes</h4>
+        <div id="alerts-area" class="mt-2">${alertsHtml}</div>
+      </div>
+    `;
+
+    document.getElementById('admin-area-placeholder').innerHTML = html;
+    safeCreateIcons && safeCreateIcons();
+
+    document.getElementById('store-form').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const name = document.getElementById('store-name').value.trim();
+      const lat = parseFloat(document.getElementById('store-lat').value);
+      const lng = parseFloat(document.getElementById('store-lng').value);
+      if (!name || Number.isNaN(lat) || Number.isNaN(lng)) { showMessage('Datos inválidos', 'error'); return; }
+      await put('stores', { id: crypto.randomUUID ? crypto.randomUUID() : Date.now()+'' , name, lat, lng, createdAt: Date.now() });
+      showMessage('Sucursal guardada', 'success');
+      await renderAdminPanel();
+    });
+
+    document.getElementById('btn-capture-store').addEventListener('click', async ()=>{
+      const pos = await getCurrentPositionSafe();
+      if (pos) {
+        document.getElementById('store-lat').value = pos.lat;
+        document.getElementById('store-lng').value = pos.lng;
+      } else showMessage('No se pudo capturar ubicación', 'error');
+    });
+
+    document.getElementById('emp-form').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const name = document.getElementById('emp-name').value.trim();
+      const storeId = document.getElementById('emp-store').value || null;
+      if (!name) { showMessage('Nombre requerido', 'error'); return; }
+      await put('employees', { id: crypto.randomUUID ? crypto.randomUUID() : Date.now()+'', name, storeId, createdAt: Date.now() });
+      showMessage('Empleado guardado', 'success');
+      await renderAdminPanel();
+    });
+
+    document.getElementById('btn-admin-logout').addEventListener('click', async ()=>{
+      isAdmin = false;
+      showMessage('Sesión cerrada', 'info');
+      await renderSetupView();
+    });
+
+    // remove buttons
+    document.querySelectorAll('.remove-btn').forEach(btn=>{
+      btn.addEventListener('click', async (ev)=>{
+        const id = ev.currentTarget.dataset.id;
+        const store = ev.currentTarget.dataset.store;
+        if (!confirm('Eliminar?')) return;
+        await remove(store, id);
+        showMessage('Eliminado', 'success');
+        await renderAdminPanel();
+      });
+    });
+
+    // helper getCurrentPosition
+    async function getCurrentPositionSafe() {
+      try {
+        if (window.getCurrentLocation) {
+          const p = await window.getCurrentLocation();
+          if (p && typeof p.lat === 'number' && typeof p.lng === 'number') return p;
+        }
+        return await new Promise((resolve) => {
+          if (!navigator.geolocation) return resolve(null);
+          navigator.geolocation.getCurrentPosition(po => resolve({ lat: po.coords.latitude, lng: po.coords.longitude }), () => resolve(null), { enableHighAccuracy: true, timeout: 10000 });
+        });
+      } catch (e) { return null; }
+    }
+  }
+
+  // export
+  window.renderSetupView = renderSetupView;
 })();

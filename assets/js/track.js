@@ -1,162 +1,215 @@
 // assets/js/track.js
+// Vista correcta para Fichar usando la tabla BRANCHES y no STORES.
 (function () {
-    // Dependencias: appDB, getAll, put, getCurrentLocation, getDistance, showMessage, hideMessage, safeCreateIcons
+
+    // =============================
+    // RENDER FICHAR (TRACK VIEW)
+    // =============================
     async function renderTrackView() {
-        const contentArea = document.getElementById('content-area');
-        const branches = await getAll('branches');
+        const content = document.getElementById('content-area');
+
         const employees = await getAll('employees');
+        const branches = await getAll('branches');
 
-        // Ultimos entries
-        const lastEntries = await appDB.timeEntries.orderBy('id').reverse().limit(8).toArray();
+        const employeeOptions = employees
+            .map(e => `<option value="${e.id}">${e.name}</option>`)
+            .join('');
 
-        const employeeMap = new Map((employees || []).map(e => [e.id, e.name]));
-        const employeeOptions = (employees || []).map(e => `<option value="${e.id}">${e.name} (${branches.find(b => b.id === e.branchId)?.name || 'Sin Sucursal'})</option>`).join('');
+        const branchOptions = branches
+            .map(b => `<option value="${b.id}">${b.name}</option>`)
+            .join('');
 
-        const latestEntriesHtml = (lastEntries || []).map(entry => {
-            const status = entry.clockOut ? 'Finalizado' : 'En turno';
-            const statusColor = entry.clockOut ? 'text-green-600' : 'text-yellow-600 font-semibold';
-            const employeeName = employeeMap.get(entry.employeeId) || 'Desconocido';
-            const timeIn = new Date(entry.clockIn).toLocaleTimeString();
-            const timeOut = entry.clockOut ? new Date(entry.clockOut).toLocaleTimeString() : 'N/A';
-            return `
-                <div class="card p-3 border-l-4 ${entry.clockOut ? 'border-green-400' : 'border-yellow-400'}">
-                    <p class="font-bold text-gray-800">${employeeName}</p>
-                    <p class="text-sm text-gray-600">IN: ${timeIn} | OUT: ${timeOut}</p>
-                    <p class="text-sm ${statusColor}">${status}</p>
-                </div>
-            `;
-        }).join('');
+        content.innerHTML = `
+            <h2 class="text-3xl font-bold mb-6 text-gray-800">Fichar</h2>
 
-        contentArea.innerHTML = `
-            <h2 class="text-3xl font-bold mb-6 text-gray-800">Registro de Tiempo</h2>
             <div class="card p-6 mb-6">
-                <label for="employee-select" class="block text-sm font-medium text-gray-700 mb-2">Seleccionar Empleado</label>
-                <select id="employee-select" class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 p-3">
-                    <option value="">-- Selecciona --</option>
-                    ${employeeOptions}
-                </select>
+                <form id="clock-form" class="space-y-3">
+                    
+                    <div>
+                        <label class="text-sm text-gray-700">Empleado</label>
+                        <select id="clock-employee" class="w-full p-2 border rounded" required>
+                            <option value="">-- Seleccionar empleado --</option>
+                            ${employeeOptions}
+                        </select>
+                    </div>
 
-                <div class="mt-6 text-center">
-                    <button id="main-clock-btn"
-                            class="clock-button w-full max-w-sm mx-auto text-white font-bold py-4 px-6 rounded-xl shadow-lg bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-opacity-50 transition duration-150 ease-in-out">
-                        <i data-lucide="log-in" class="w-6 h-6 inline mr-2"></i>
-                        Registrar Entrada (Clock In)
-                    </button>
-                </div>
+                    <div>
+                        <label class="text-sm text-gray-700">Sucursal</label>
+                        <select id="clock-branch" class="w-full p-2 border rounded">
+                            <option value="">-- Seleccionar sucursal --</option>
+                            ${branchOptions}
+                        </select>
+                    </div>
 
-                <div id="status-message" class="mt-6 p-3 text-sm text-center bg-blue-50 text-blue-800 rounded-lg hidden">
-                    Obteniendo ubicación... Por favor, espere.
-                </div>
+                    <div class="flex gap-2">
+                        <button id="btn-clock-in" class="p-2 bg-blue-600 text-white rounded flex-1">
+                            Clock In
+                        </button>
+                        <button id="btn-clock-out" class="p-2 bg-gray-700 text-white rounded flex-1">
+                            Clock Out
+                        </button>
+                    </div>
+                </form>
             </div>
 
-            <h3 class="text-xl font-semibold text-gray-800 mb-3">Últimos Registros (Globales)</h3>
-            <div id="latest-entries" class="space-y-3">
-                 ${latestEntriesHtml || '<p class="text-gray-500">No hay registros de tiempo.</p>'}
+            <div id="recent-entries" class="card p-6">
+                <h3 class="text-xl font-semibold mb-3 text-gray-700">Últimos registros</h3>
+                <div id="track-log-content" class="text-sm"></div>
             </div>
         `;
+
         safeCreateIcons();
-        document.getElementById('employee-select').addEventListener('change', updateClockButtonState);
-        document.getElementById('main-clock-btn').addEventListener('click', () => {
-            // accion depende del estado actual (IN o OUT)
-            const curr = document.getElementById('main-clock-btn').getAttribute('data-action') || 'IN';
-            handleClockAction(curr);
+        wireTrackEvents();
+        renderRecentEntries();
+    }
+
+    // =============================
+    // EVENTOS CLOCK IN
+    // =============================
+    async function handleClockIn(ev) {
+        ev.preventDefault();
+
+        const employeeId = document.getElementById('clock-employee').value;
+        const branchId = document.getElementById('clock-branch').value || null;
+
+        if (!employeeId) return showMessage("Seleccione un empleado", "error");
+
+        const loc = await getCurrentLocationSafe();
+
+        const entry = {
+            employeeId,
+            branchId,
+            clockIn: Date.now(),
+            clockOut: null,
+            clockInCoords: loc
+        };
+
+        await put('timeEntries', entry);
+
+        showMessage("Entrada registrada", "success");
+        renderRecentEntries();
+
+        // ✅ Inicia refresco periódico de coords tras el primer Clock In
+        startLocationRefresh(employeeId);
+    }
+
+    // =============================
+    // EVENTOS CLOCK OUT
+    // =============================
+    async function handleClockOut(ev) {
+        ev.preventDefault();
+
+        const employeeId = document.getElementById('clock-employee').value;
+
+        if (!employeeId) return showMessage("Seleccione un empleado", "error");
+
+        const entries = await getAll('timeEntries');
+
+        const last = entries
+            .filter(e => e.employeeId == employeeId && !e.clockOut)
+            .sort((a, b) => b.clockIn - a.clockIn)[0];
+
+        if (!last) return showMessage("No hay una entrada activa", "error");
+
+        last.clockOut = Date.now();
+
+        await put('timeEntries', last);
+
+        showMessage("Salida registrada", "success");
+        renderRecentEntries();
+
+        // ✅ Detiene refresco automático al hacer Clock Out
+        stopLocationRefresh();
+    }
+
+    // =============================
+    // LISTA DE REGISTROS
+    // =============================
+    async function renderRecentEntries() {
+        const container = document.getElementById("track-log-content");
+        const entries = await getAll("timeEntries");
+        const employees = await getAll("employees");
+
+        const list = entries
+            .sort((a, b) => b.clockIn - a.clockIn)
+            .slice(0, 10)
+            .map(e => {
+                const emp = employees.find(x => x.id == e.employeeId);
+                return `
+                    <div class="p-2 border-b">
+                        <strong>${emp ? emp.name : "Empleado"}</strong>
+                        <div class="text-xs text-gray-500">
+                            In: ${e.clockIn ? new Date(e.clockIn).toLocaleString() : "-"}  
+                            <br>
+                            Out: ${e.clockOut ? new Date(e.clockOut).toLocaleString() : "-"}  
+                            <br>
+                            Coords: ${
+                                e.clockInCoords
+                                    ? `${e.clockInCoords.lat.toFixed(4)}, ${e.clockInCoords.lng.toFixed(4)}`
+                                    : "sin coords"
+                            }
+                        </div>
+                    </div>
+                `;
+            })
+            .join('');
+
+        container.innerHTML = list || "<p class='text-gray-500'>No hay registros.</p>";
+    }
+
+    // =============================
+    // GEOLOCALIZACIÓN SEGURA
+    // =============================
+    async function getCurrentLocationSafe() {
+        return new Promise(resolve => {
+            navigator.geolocation.getCurrentPosition(
+                pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+                () => resolve(null),
+                { enableHighAccuracy: true, timeout: 8000 }
+            );
         });
-        await updateClockButtonState();
     }
 
-    async function updateClockButtonState() {
-        const $select = document.getElementById('employee-select');
-        const $button = document.getElementById('main-clock-btn');
-        if (!$select || !$button) return;
+    // =============================
+    // REFRESCO PERIÓDICO DE UBICACIÓN (cada 1 hora)
+    // =============================
+    let refreshTimer = null;
 
-        const employeeId = parseInt($select.value);
-        if (isNaN(employeeId)) {
-            $button.setAttribute('data-action', 'OUT');
-            $button.innerHTML = `<i data-lucide="log-in" class="w-6 h-6 inline mr-2"></i> Registrar Entrada (Clock In)`;
-            safeCreateIcons();
-            return;
-        }
+    function startLocationRefresh(employeeId) {
+        if (refreshTimer) clearInterval(refreshTimer);
 
-        let openEntry = null;
-        try {
-            openEntry = await appDB.timeEntries
-                .where('employeeId').equals(employeeId)
-                .and(e => e.clockOut === null || e.clockOut === undefined)
-                .last();
-        } catch (e) {
-            // posible que no exista
-            openEntry = null;
-        }
+        refreshTimer = setInterval(async () => {
+            const loc = await getCurrentLocationSafe();
+            if (!loc) return;
 
-        const status = openEntry ? 'IN' : 'OUT';
-        const buttonText = status === 'IN' ? 'Registrar Salida (Clock Out)' : 'Registrar Entrada (Clock In)';
-        const buttonColor = status === 'IN' ? 'bg-red-500 hover:bg-red-600' : 'bg-green-600 hover:bg-green-700';
-        const buttonIcon = status === 'IN' ? 'log-out' : 'log-in';
+            const entries = await getAll('timeEntries');
+            const last = entries
+                .filter(e => e.employeeId == employeeId && !e.clockOut)
+                .sort((a, b) => b.clockIn - a.clockIn)[0];
 
-        $button.setAttribute('data-action', status === 'IN' ? 'OUT' : 'IN'); // action to perform if clicked
-        $button.className = `clock-button w-full max-w-sm mx-auto text-white font-bold py-4 px-6 rounded-xl shadow-lg ${buttonColor} focus:outline-none focus:ring-4 focus:ring-opacity-50 transition duration-150 ease-in-out`;
-        $button.innerHTML = `<i data-lucide="${buttonIcon}" class="w-6 h-6 inline mr-2"></i> ${buttonText}`;
-        safeCreateIcons();
-    }
-
-    async function handleClockAction(requestedAction) {
-        // requestedAction: 'IN' (means we should create an entry) or 'OUT' (means close)
-        const select = document.getElementById('employee-select');
-        const statusEl = document.getElementById('status-message');
-        const employeeId = parseInt(select.value);
-        if (isNaN(employeeId)) { showMessage('Empleado no seleccionado.', 'error'); return; }
-        const employee = (await getAll('employees')).find(e => e.id === employeeId);
-        if (!employee) { showMessage('Empleado no encontrado.', 'error'); return; }
-
-        statusEl.textContent = 'Obteniendo ubicación... Por favor, espere.';
-        statusEl.classList.remove('hidden');
-
-        try {
-            const location = await getCurrentLocation();
-            statusEl.classList.add('hidden');
-
-            if (requestedAction === 'IN') {
-                // create entry
-                const entry = {
-                    employeeId: employeeId,
-                    branchId: employee.branchId || null,
-                    clockIn: Date.now(),
-                    inLat: location.lat,
-                    inLng: location.lng,
-                    clockOut: null
-                };
-                await put('timeEntries', entry);
-                showMessage(`Entrada registrada para ${employee.name}.`, 'success');
-            } else {
-                // find open entry
-                const openEntry = await appDB.timeEntries
-                    .where('employeeId').equals(employeeId)
-                    .and(e => e.clockOut === null || e.clockOut === undefined)
-                    .last();
-
-                if (!openEntry) {
-                    showMessage('No se encontró una entrada abierta para este empleado.', 'error');
-                    return;
-                }
-
-                openEntry.clockOut = Date.now();
-                openEntry.outLat = location.lat;
-                openEntry.outLng = location.lng;
-                await put('timeEntries', openEntry);
-                showMessage(`Salida registrada para ${employee.name}.`, 'success');
+            if (last) {
+                last.clockInCoords = loc; // 🔄 actualiza coords
+                await put('timeEntries', last);
+                renderRecentEntries();
             }
+        }, 60 * 60 * 1000); // cada 1 hora
+    }
 
-            // actualizar vista
-            await renderTrackView();
-        } catch (error) {
-            statusEl.classList.add('hidden');
-            console.error(error);
-            showMessage(`Error al registrar: ${error?.message || error}`, 'error');
+    function stopLocationRefresh() {
+        if (refreshTimer) {
+            clearInterval(refreshTimer);
+            refreshTimer = null;
         }
     }
 
-    // export functions to global so app.js can call them
+    // =============================
+    // WIRE EVENTS
+    // =============================
+    function wireTrackEvents() {
+        document.getElementById("btn-clock-in").addEventListener("click", handleClockIn);
+        document.getElementById("btn-clock-out").addEventListener("click", handleClockOut);
+    }
+
     window.renderTrackView = renderTrackView;
-    window.updateClockButtonState = updateClockButtonState;
-    window.handleClockAction = handleClockAction;
+
 })();

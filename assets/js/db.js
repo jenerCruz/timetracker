@@ -12,7 +12,8 @@
     db.version(DB_VERSION).stores({
         branches: '++id, name, lat, lng',
         employees: '++id, name, branchId',
-        timeEntries: '++id, employeeId, clockIn, branchId'
+        timeEntries: '++id, employeeId, clockIn, branchId',
+        settings: 'key' // NUEVO: Tabla para guardar configuraciones clave-valor (ej. Admin PIN)
     });
 
     // Exponer db globalmente
@@ -21,6 +22,17 @@
     // Helpers
     window.getAll = async function (storeName) {
         return (await db.table(storeName).toArray()) || [];
+    };
+    
+    // NUEVO HELPER para obtener una configuración específica por clave
+    window.getSetting = async function (key) {
+        const setting = await db.table('settings').get(key);
+        return setting ? setting.value : null;
+    };
+
+    // NUEVO HELPER para guardar una configuración específica por clave
+    window.putSetting = async function (key, value) {
+        return await db.table('settings').put({ key, value });
     };
 
     window.put = async function (storeName, item) {

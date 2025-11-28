@@ -5,10 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Time Tracker PWA (Offline Ready)</title>
 
-    <!-- Nota: para offline real, reemplaza este CDN por un tailwind.css local en /assets/css/tailwind.css -->
-    <link rel="stylesheet" href="style.css">
-
-    <!-- Fonts: para offline descargar Inter y servir localmente; aquí usa Google por conveniencia -->
+    <link href="./css/output.css" rel="stylesheet">
+    <script src="./assets/js/lucide.min.js"></script>
+    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
@@ -27,75 +26,78 @@
         input:focus, select:focus { border-color: var(--accent-color); box-shadow: 0 0 0 3px rgba(59,130,246,.18); }
         .bar-container { display:flex; align-items:center; margin-bottom:.5rem; }
         .bar { height:1.5rem; border-radius:.25rem; transition: width .5s ease; background-color:#3b82f6; }
-        /* simple responsive fix for bigger screens */
         @media(min-width:640px) {
             nav.sm-hidden { display:none; }
         }
     </style>
 </head>
 <body class="bg-gray-50">
-    <div id="app" class="app-container max-w-4xl mx-auto shadow-2xl bg-white">
-        <header class="p-4 border-b bg-white sticky top-0 z-10">
-            <h1 class="text-2xl font-extrabold text-gray-800 flex items-center">
-                <i data-lucide="clock" class="w-6 h-6 mr-2 text-indigo-700"></i>
-                Time Tracker Pro
-            </h1>
-            <p id="user-id-display" class="text-xs mt-1 text-gray-500 truncate">ID de Usuario: Cargando...</p>
-        </header>
 
-        <main id="content-area" class="main-content p-4 sm:p-6 pb-20 overflow-y-auto">
-            <div class="text-center py-10 text-gray-500">
-                <i data-lucide="loader-2" class="w-8 h-8 mx-auto animate-spin"></i>
-                <p class="mt-2">Cargando aplicación...</p>
-            </div>
-        </main>
+<div id="app" class="app-container max-w-4xl mx-auto shadow-2xl bg-white">
 
-        <nav class="fixed bottom-0 left-0 right-0 bg-white border-t shadow-2xl z-20 sm:hidden">
-            <div class="flex justify-around items-center h-16">
-                <button id="nav-dashboard" class="flex flex-col items-center p-2 text-gray-500 hover:text-blue-500">
-                    <i data-lucide="layout-dashboard" class="w-6 h-6 nav-icon active" data-view="dashboard"></i>
-                    <span class="text-xs mt-1 font-medium">Inicio</span>
-                </button>
-                <button id="nav-track" class="flex flex-col items-center p-2 text-gray-500 hover:text-blue-500">
-                    <i data-lucide="clock-3" class="w-6 h-6 nav-icon" data-view="track"></i>
-                    <span class="text-xs mt-1 font-medium">Registro</span>
-                </button>
-                <button id="nav-reports" class="flex flex-col items-center p-2 text-gray-500 hover:text-blue-500">
-                    <i data-lucide="bar-chart-3" class="w-6 h-6 nav-icon" data-view="reports"></i>
-                    <span class="text-xs mt-1 font-medium">Reportes</span>
-                </button>
-                <button id="nav-setup" class="flex flex-col items-center p-2 text-gray-500 hover:text-blue-500">
-                    <i data-lucide="settings" class="w-6 h-6 nav-icon" data-view="setup"></i>
-                    <span class="text-xs mt-1 font-medium">Ajustes</span>
-                </button>
-            </div>
-        </nav>
+    <header class="p-4 border-b bg-white sticky top-0 z-10">
+        <h1 class="text-2xl font-extrabold text-gray-800 flex items-center">
+            <i data-lucide="clock" class="w-6 h-6 mr-2 text-indigo-700"></i>
+            Time Tracker Pro
+        </h1>
+        <p id="user-id-display" class="text-xs mt-1 text-gray-500 truncate">ID de Usuario: Cargando...</p>
+    </header>
 
-        <div id="modal-container" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden items-center justify-center p-4 z-50"></div>
-    </div>
+    <main id="content-area" class="main-content p-4 sm:p-6 pb-20 overflow-y-auto">
+        <div class="text-center py-10 text-gray-500">
+            <i data-lucide="loader-2" class="w-8 h-8 mx-auto animate-spin"></i>
+            <p class="mt-2">Cargando aplicación...</p>
+        </div>
+    </main>
 
-    <!-- LÓGICA: order matters -->
-    <!-- 1) dependencias (Dexie + Lucide) -->
-    <script src="./assets/js/dexie.js"></script>
-    <script src="./assets/js/lucide.min.js"></script>
+    <!-- 🔥 AQUI SE SUSTITUYÓ EL NAV ANTIGUO POR EL TUYO 🔥 -->
+    <nav id="nav-bar" class="fixed bottom-0 w-full bg-white border-t shadow-lg flex justify-around items-center h-16 z-10 sm:hidden">
+    
+        <button id="nav-dashboard" class="nav-button p-2 flex flex-col items-center text-blue-500">
+            <i data-lucide="home" class="w-6 h-6 nav-icon active" data-view="dashboard"></i>
+            <span class="text-xs">Inicio</span>
+        </button>
+        
+        <button id="nav-track" class="nav-button p-2 flex flex-col items-center text-gray-500 hover:text-blue-500">
+            <i data-lucide="clock" class="w-6 h-6 nav-icon" data-view="track"></i>
+            <span class="text-xs">Fichar</span>
+        </button>
+        
+        <button id="nav-reports" class="nav-button p-2 flex flex-col items-center text-gray-500 hover:text-blue-500">
+            <i data-lucide="bar-chart-2" class="w-6 h-6 nav-icon" data-view="reports"></i>
+            <span class="text-xs">Reportes</span>
+        </button>
+        
+        <button id="nav-map" class="nav-button p-2 flex flex-col items-center text-gray-500 hover:text-blue-500">
+            <i data-lucide="map" class="w-6 h-6 nav-icon" data-view="map"></i>
+            <span class="text-xs">Mapa</span>
+        </button>
 
-    <!-- 2) módulos locales -->
-    <script src="./assets/js/db.js"></script>
-    <script src="./assets/js/utils.js"></script>
-    <script src="./assets/js/track.js"></script>
-    <script src="./assets/js/reports.js"></script>
-    <script src="./assets/js/setup.js"></script>
+        <button id="nav-setup" class="nav-button p-2 flex flex-col items-center text-gray-500 hover:text-blue-500">
+            <i data-lucide="settings" class="w-6 h-6 nav-icon" data-view="setup"></i>
+            <span class="text-xs">Ajustes</span>
+        </button>
 
-    <!-- 3) archivo principal (router, dashboard, init) -->
-    <script src="./assets/js/app.js"></script>
+    </nav>
 
-    <!-- Service worker: registro seguro (se puede comentar si no lo quieres) -->
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js').catch(err => console.warn('SW registro falló:', err));
-            });
-        }
-    </script>
+    <div id="modal-container" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden items-center justify-center p-4 z-50"></div>
+</div>
+
+<script src="./assets/js/dexie.js"></script>
+<script src="./assets/js/db.js"></script>
+<script src="./assets/js/utils.js"></script>
+<script src="./assets/js/track.js"></script>
+<script src="./assets/js/reports.js"></script>
+<script src="./assets/js/map.js"></script>
+ <script src="./assets/js/setup.js"></script>
+<script src="./assets/js/app.js"></script>
+
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW registro falló:', err));
+        });
+    }
+</script>
 </body>
 </html>

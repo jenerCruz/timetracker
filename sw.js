@@ -10,7 +10,10 @@ const ASSETS = [
   '/assets/js/track.js',
   '/assets/js/reports.js',
   '/assets/js/setup.js',
-  '/assets/js/app.js'
+  '/assets/js/app.js',
+  '/assets/js/map.js'
+  
+  
   // agrega tus css y fonts locales aquí
 ];
 
