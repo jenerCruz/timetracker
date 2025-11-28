@@ -1,0 +1,6 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* importa tus fuentes locales */
+@import "../assets/css/fonts.css";
