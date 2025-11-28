@@ -88,6 +88,9 @@
 
         showMessage("Entrada registrada", "success");
         renderRecentEntries();
+
+        // ✅ Inicia refresco periódico de coords tras el primer Clock In
+        startLocationRefresh(employeeId);
     }
 
     // =============================
@@ -114,6 +117,9 @@
 
         showMessage("Salida registrada", "success");
         renderRecentEntries();
+
+        // ✅ Detiene refresco automático al hacer Clock Out
+        stopLocationRefresh();
     }
 
     // =============================
@@ -152,14 +158,9 @@
     }
 
     // =============================
-    // GEOLOCALIZACIÓN
+    // GEOLOCALIZACIÓN SEGURA
     // =============================
     async function getCurrentLocationSafe() {
-        if (window.getCurrentLocation) {
-            const loc = await window.getCurrentLocation();
-            if (loc && loc.lat) return loc;
-        }
-
         return new Promise(resolve => {
             navigator.geolocation.getCurrentPosition(
                 pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
@@ -169,6 +170,41 @@
         });
     }
 
+    // =============================
+    // REFRESCO PERIÓDICO DE UBICACIÓN (cada 1 hora)
+    // =============================
+    let refreshTimer = null;
+
+    function startLocationRefresh(employeeId) {
+        if (refreshTimer) clearInterval(refreshTimer);
+
+        refreshTimer = setInterval(async () => {
+            const loc = await getCurrentLocationSafe();
+            if (!loc) return;
+
+            const entries = await getAll('timeEntries');
+            const last = entries
+                .filter(e => e.employeeId == employeeId && !e.clockOut)
+                .sort((a, b) => b.clockIn - a.clockIn)[0];
+
+            if (last) {
+                last.clockInCoords = loc; // 🔄 actualiza coords
+                await put('timeEntries', last);
+                renderRecentEntries();
+            }
+        }, 60 * 60 * 1000); // cada 1 hora
+    }
+
+    function stopLocationRefresh() {
+        if (refreshTimer) {
+            clearInterval(refreshTimer);
+            refreshTimer = null;
+        }
+    }
+
+    // =============================
+    // WIRE EVENTS
+    // =============================
     function wireTrackEvents() {
         document.getElementById("btn-clock-in").addEventListener("click", handleClockIn);
         document.getElementById("btn-clock-out").addEventListener("click", handleClockOut);
